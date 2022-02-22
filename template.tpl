@@ -153,6 +153,12 @@ ___TEMPLATE_PARAMETERS___
         ]
       },
       {
+        "type": "TEXT",
+        "name": "productArray",
+        "displayName": "Array of products in EE format",
+        "simpleValueType": true
+      },
+      {
         "type": "CHECKBOX",
         "name": "useIP",
         "checkboxText": "Send User IP address",
@@ -256,6 +262,14 @@ const isDebug = containerVersion.debugMode;
 const isLoggingEnabled = determinateIsLoggingEnabled();
 const traceId = getRequestHeader('trace-id');
 
+const impactNames = {
+  'id': 'ItemSku',
+  'name': 'ItemName',
+  'category': 'ItemCategory',
+  'quantity': 'ItemQuantity',
+  'price': 'ItemPrice'
+};
+
 if (data.type === 'page_view') {
     const url = getEventData('page_location') || getRequestHeader('referer');
 
@@ -287,6 +301,28 @@ if (data.type === 'page_view') {
     postBody.EventTypeId =  data.eventTypeId;
     postBody.CampaignId =  data.campaignId;
     postBody.OrderId = data.orderId;
+
+    if (data.productArray) {
+      for (let i = 0; i < data.productArray.length; i++) {
+        
+        if (data.productArray[i].sku)
+          postBody[impactNames.id + (i + 1)] = data.productArray[i].sku;
+        else if (data.productArray[i].id)
+          postBody[impactNames.id + (i +1)] = data.productArray[i].id;
+      
+        if (data.productArray[i].name)
+          postBody[impactNames.name + (i +1)] = data.productArray[i].name;
+      
+        if (data.productArray[i].category)
+          postBody[impactNames.category + (i +1)] = data.productArray[i].category;
+      
+        if (data.productArray[i].quantity)
+          postBody[impactNames.quantity + (i +1)] = data.productArray[i].quantity;
+      
+        if (data.productArray[i].price)
+          postBody[impactNames.price + (i +1)] = data.productArray[i].price;
+      }
+    }
 
     if (data.useIP) {
         postBody.IpAddress = getRemoteAddress();
