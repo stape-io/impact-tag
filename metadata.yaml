@@ -1,4 +1,6 @@
 homepage: "https://stape.io/"
 versions:
+  - sha: 1074c5e9cfd5e4c08c615ea6163a6322c071b808
+    changeNotes: Add product array parsing.
   - sha: 3a934bedece6043c377fa0799185471e0335d7df
     changeNotes: Initial release.
