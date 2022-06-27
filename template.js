@@ -5,10 +5,11 @@ const JSON = require('JSON');
 const getRequestHeader = require('getRequestHeader');
 const encodeUriComponent = require('encodeUriComponent');
 const getCookieValues = require('getCookieValues');
-const getEventData = require('getEventData');
 const toBase64 = require('toBase64');
 const makeTableMap = require('makeTableMap');
 const getRemoteAddress = require('getRemoteAddress');
+const getAllEventData = require('getAllEventData');
+const eventData = getAllEventData();
 
 const logToConsole = require('logToConsole');
 const getContainerVersion = require('getContainerVersion');
@@ -26,7 +27,7 @@ const impactNames = {
 };
 
 if (data.type === 'page_view') {
-    const url = getEventData('page_location') || getRequestHeader('referer');
+    const url = eventData.page_location || getRequestHeader('referer');
 
     if (url) {
         const value = parseUrl(url).searchParams[data.clickIdParameterName];
@@ -50,6 +51,8 @@ if (data.type === 'page_view') {
     let requestUrl = 'https://api.impact.com/Advertisers/'+enc(data.accountSID)+'/Conversions';
     const requestHeaders = {'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Basic '+toBase64(data.accountSID+':'+data.authToken)};
     const postBody = data.additionalParameters ? makeTableMap(data.additionalParameters, 'name', 'value') : {};
+    let currencyFromItems = '';
+    let couponFromItems = '';
 
     postBody.ClickId = getCookieValues('impact_cid')[0] || '';
     postBody.EventDate =  'NOW';
@@ -59,11 +62,17 @@ if (data.type === 'page_view') {
 
     if (data.productArray) {
         for (let i = 0; i < data.productArray.length; i++) {
+            if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
+            if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
 
             if (data.productArray[i].sku)
                 postBody[impactNames.id + (i + 1)] = data.productArray[i].sku;
+            else if (data.productArray[i].item_sku)
+                postBody[impactNames.id + (i +1)] = data.productArray[i].item_sku;
             else if (data.productArray[i].id)
                 postBody[impactNames.id + (i +1)] = data.productArray[i].id;
+            else if (data.productArray[i].item_id)
+                postBody[impactNames.id + (i +1)] = data.productArray[i].item_id;
 
             if (data.productArray[i].name)
                 postBody[impactNames.name + (i +1)] = data.productArray[i].name;
@@ -78,6 +87,21 @@ if (data.type === 'page_view') {
                 postBody[impactNames.price + (i +1)] = data.productArray[i].price;
         }
     }
+
+    if (!postBody.CurrencyCode) {
+        if (eventData.currency) postBody.CurrencyCode = eventData.currency;
+        else if (currencyFromItems) postBody.CurrencyCode = currencyFromItems;
+    }
+
+    if (!postBody.OrderPromoCode) {
+        if (eventData.coupon) postBody.OrderPromoCode = eventData.coupon;
+        else if (couponFromItems) postBody.OrderPromoCode = couponFromItems;
+    }
+
+    if (!postBody.OrderDiscount) {
+        if (eventData.discount) postBody.OrderDiscount = eventData.discount;
+    }
+
 
     if (data.useIP) {
         postBody.IpAddress = getRemoteAddress();
