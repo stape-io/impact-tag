@@ -321,9 +321,13 @@ if (data.type === 'page_view') {
 
             if (data.productArray[i].name)
                 postBody[impactNames.name + (i +1)] = data.productArray[i].name;
+            else if (data.productArray[i].item_name)
+                postBody[impactNames.name + (i +1)] = data.productArray[i].item_name;
 
             if (data.productArray[i].category)
                 postBody[impactNames.category + (i +1)] = data.productArray[i].category;
+            else if (data.productArray[i].item_category)
+                postBody[impactNames.category + (i +1)] = data.productArray[i].item_category;
 
             if (data.productArray[i].quantity)
                 postBody[impactNames.quantity + (i +1)] = data.productArray[i].quantity;
