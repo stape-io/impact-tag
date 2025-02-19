@@ -254,156 +254,166 @@ const toBase64 = require('toBase64');
 const makeTableMap = require('makeTableMap');
 const getRemoteAddress = require('getRemoteAddress');
 const getAllEventData = require('getAllEventData');
-const eventData = getAllEventData();
-
 const logToConsole = require('logToConsole');
 const getContainerVersion = require('getContainerVersion');
-const containerVersion = getContainerVersion();
-const isDebug = containerVersion.debugMode;
+
 const isLoggingEnabled = determinateIsLoggingEnabled();
 const traceId = getRequestHeader('trace-id');
+const eventData = getAllEventData();
 
-const impactNames = {
+if (data.type === 'page_view') {
+  const url = eventData.page_location || getRequestHeader('referer');
+
+  if (url) {
+    const value = parseUrl(url).searchParams[data.clickIdParameterName];
+
+    if (value) {
+      const options = {
+        domain: 'auto',
+        path: '/',
+        secure: true,
+        httpOnly: false
+      };
+
+      if (data.expiration > 0) options['max-age'] = data.expiration;
+
+      setCookie('impact_cid', value, options, false);
+    }
+  }
+
+  data.gtmOnSuccess();
+} else {
+  let requestUrl = 'https://api.impact.com/Advertisers/' + enc(data.accountSID) + '/Conversions';
+  const requestHeaders = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
+  };
+  const postBody = data.additionalParameters ? makeTableMap(data.additionalParameters, 'name', 'value') : {};
+  let currencyFromItems = '';
+  let couponFromItems = '';
+  const impactNames = {
     'id': 'ItemSku',
     'name': 'ItemName',
     'category': 'ItemCategory',
     'quantity': 'ItemQuantity',
     'price': 'ItemPrice'
-};
+  };
 
-if (data.type === 'page_view') {
-    const url = eventData.page_location || getRequestHeader('referer');
+  postBody.ClickId = getCookieValues('impact_cid')[0] || '';
+  postBody.EventDate =  'NOW';
+  postBody.EventTypeId =  data.eventTypeId;
+  postBody.CampaignId =  data.campaignId;
+  postBody.OrderId = data.orderId;
 
-    if (url) {
-        const value = parseUrl(url).searchParams[data.clickIdParameterName];
+  if (data.productArray) {
+    for (let i = 0; i < data.productArray.length; i++) {
+      if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
+      if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
 
-        if (value) {
-            const options = {
-                domain: 'auto',
-                path: '/',
-                secure: true,
-                httpOnly: false
-            };
+      if (data.productArray[i].sku)
+        postBody[impactNames.id + (i + 1)] = data.productArray[i].sku;
+      else if (data.productArray[i].item_sku)
+        postBody[impactNames.id + (i + 1)] = data.productArray[i].item_sku;
+      else if (data.productArray[i].id)
+        postBody[impactNames.id + (i + 1)] = data.productArray[i].id;
+      else if (data.productArray[i].item_id)
+        postBody[impactNames.id + (i + 1)] = data.productArray[i].item_id;
 
-            if (data.expiration > 0) options['max-age'] = data.expiration;
+      if (data.productArray[i].name)
+        postBody[impactNames.name + (i + 1)] = data.productArray[i].name;
+      else if (data.productArray[i].item_name)
+        postBody[impactNames.name + (i + 1)] = data.productArray[i].item_name;
 
-            setCookie('impact_cid', value, options, false);
-        }
+      if (data.productArray[i].category)
+        postBody[impactNames.category + (i + 1)] = data.productArray[i].category;
+      else if (data.productArray[i].item_category)
+        postBody[impactNames.category + (i + 1)] = data.productArray[i].item_category;
+
+      if (data.productArray[i].quantity)
+        postBody[impactNames.quantity + (i + 1)] = data.productArray[i].quantity;
+
+      if (data.productArray[i].price)
+        postBody[impactNames.price + (i + 1)] = data.productArray[i].price;
     }
+  }
 
-    data.gtmOnSuccess();
-} else {
-    let requestUrl = 'https://api.impact.com/Advertisers/'+enc(data.accountSID)+'/Conversions';
-    const requestHeaders = {'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Basic '+toBase64(data.accountSID+':'+data.authToken)};
-    const postBody = data.additionalParameters ? makeTableMap(data.additionalParameters, 'name', 'value') : {};
-    let currencyFromItems = '';
-    let couponFromItems = '';
+  if (!postBody.CurrencyCode) {
+    if (eventData.currency) postBody.CurrencyCode = eventData.currency;
+    else if (currencyFromItems) postBody.CurrencyCode = currencyFromItems;
+  }
 
-    postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-    postBody.EventDate =  'NOW';
-    postBody.EventTypeId =  data.eventTypeId;
-    postBody.CampaignId =  data.campaignId;
-    postBody.OrderId = data.orderId;
+  if (!postBody.OrderPromoCode) {
+    if (eventData.coupon) postBody.OrderPromoCode = eventData.coupon;
+    else if (couponFromItems) postBody.OrderPromoCode = couponFromItems;
+  }
 
-    if (data.productArray) {
-        for (let i = 0; i < data.productArray.length; i++) {
-            if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
-            if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
+  if (!postBody.OrderDiscount) {
+    if (eventData.discount) postBody.OrderDiscount = eventData.discount;
+  }
 
-            if (data.productArray[i].sku)
-                postBody[impactNames.id + (i + 1)] = data.productArray[i].sku;
-            else if (data.productArray[i].item_sku)
-                postBody[impactNames.id + (i +1)] = data.productArray[i].item_sku;
-            else if (data.productArray[i].id)
-                postBody[impactNames.id + (i +1)] = data.productArray[i].id;
-            else if (data.productArray[i].item_id)
-                postBody[impactNames.id + (i +1)] = data.productArray[i].item_id;
+  if (data.useIP) {
+    postBody.IpAddress = getRemoteAddress();
+  }
 
-            if (data.productArray[i].name)
-                postBody[impactNames.name + (i +1)] = data.productArray[i].name;
+  if (isLoggingEnabled) {
+    logToConsole(JSON.stringify({
+      'Name': 'Impact',
+      'Type': 'Request',
+      'TraceId': traceId,
+      'EventName': data.eventName,
+      'RequestMethod': 'POST',
+      'RequestUrl': requestUrl,
+      'RequestBody': postBody,
+    }));
+  }
 
-            if (data.productArray[i].category)
-                postBody[impactNames.category + (i +1)] = data.productArray[i].category;
-
-            if (data.productArray[i].quantity)
-                postBody[impactNames.quantity + (i +1)] = data.productArray[i].quantity;
-
-            if (data.productArray[i].price)
-                postBody[impactNames.price + (i +1)] = data.productArray[i].price;
-        }
-    }
-
-    if (!postBody.CurrencyCode) {
-        if (eventData.currency) postBody.CurrencyCode = eventData.currency;
-        else if (currencyFromItems) postBody.CurrencyCode = currencyFromItems;
-    }
-
-    if (!postBody.OrderPromoCode) {
-        if (eventData.coupon) postBody.OrderPromoCode = eventData.coupon;
-        else if (couponFromItems) postBody.OrderPromoCode = couponFromItems;
-    }
-
-    if (!postBody.OrderDiscount) {
-        if (eventData.discount) postBody.OrderDiscount = eventData.discount;
-    }
-
-
-    if (data.useIP) {
-        postBody.IpAddress = getRemoteAddress();
-    }
-
+  sendHttpRequest(requestUrl, (statusCode, headers, body) => {
     if (isLoggingEnabled) {
-        logToConsole(JSON.stringify({
-            'Name': 'Impact',
-            'Type': 'Request',
-            'TraceId': traceId,
-            'EventName': data.eventName,
-            'RequestMethod': 'POST',
-            'RequestUrl': requestUrl,
-            'RequestBody': postBody,
-        }));
+      logToConsole(JSON.stringify({
+        'Name': 'Impact',
+        'Type': 'Response',
+        'TraceId': traceId,
+        'EventName': data.eventName,
+        'ResponseStatusCode': statusCode,
+        'ResponseHeaders': headers,
+        'ResponseBody': body,
+      }));
     }
 
-    sendHttpRequest(requestUrl, (statusCode, headers, body) => {
-        if (isLoggingEnabled) {
-            logToConsole(JSON.stringify({
-                'Name': 'Impact',
-                'Type': 'Response',
-                'TraceId': traceId,
-                'EventName': data.eventName,
-                'ResponseStatusCode': statusCode,
-                'ResponseHeaders': headers,
-                'ResponseBody': body,
-            }));
-        }
-
-        if (statusCode >= 200 && statusCode < 300) {
-            data.gtmOnSuccess();
-        } else {
-            data.gtmOnFailure();
-        }
-    }, {headers: requestHeaders, method: 'POST'}, JSON.stringify(postBody));
+    if (statusCode >= 200 && statusCode < 300) {
+      data.gtmOnSuccess();
+    } else {
+      data.gtmOnFailure();
+    }
+  }, { headers: requestHeaders, method: 'POST' }, JSON.stringify(postBody));
 }
 
 function enc(value) {
-    value = value || '';
-    return encodeUriComponent(value);
+  value = value || '';
+  return encodeUriComponent(value);
 }
 
 function determinateIsLoggingEnabled() {
-    if (!data.logType) {
-        return isDebug;
-    }
+  const containerVersion = getContainerVersion();
+  const isDebug = !!(
+    containerVersion &&
+    (containerVersion.debugMode || containerVersion.previewMode)
+  );
 
-    if (data.logType === 'no') {
-        return false;
-    }
+  if (!data.logType) {
+    return isDebug;
+  }
 
-    if (data.logType === 'debug') {
-        return isDebug;
-    }
+  if (data.logType === 'no') {
+    return false;
+  }
 
-    return data.logType === 'always';
+  if (data.logType === 'debug') {
+    return isDebug;
+  }
+
+  return data.logType === 'always';
 }
 
 
@@ -637,11 +647,32 @@ ___SERVER_PERMISSIONS___
 
 ___TESTS___
 
-scenarios: []
+scenarios:
+- name: Product Name and Category are present on the request body
+  code: |-
+    const logToConsole = require('logToConsole');
+
+    mockData.type = 'conversion';
+    mockData.orderId = 'orderid123';
+    mockData.productArray = [{"item_id":"SKU_12345","item_name":"Stan and Friends Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":2.22,"index":0,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"green","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":10.01,"quantity":3},{"item_id":"SKU_12346","item_name":"Google Grey Women's Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":3.33,"index":1,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"gray","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":21.01,"promotion_id":"P_12345","promotion_name":"Summer Sale","quantity":2}];
+
+    mock('sendHttpRequest', function(url, callback, headers, body) {
+      assertThat(body).contains('"ItemName1":"Stan and Friends Tee"');
+      assertThat(body).contains('"ItemCategory1":"Apparel"');
+      assertThat(body).contains('"Google Grey Women\'s Tee"');
+      assertThat(body).contains('"ItemCategory2":"Apparel"');
+    });
+
+    runCode(mockData);
+setup: |-
+  const mockData = {
+    "accountSID": "accountsid123",
+    "authToken": "authtoken123",
+    "eventTypeId": "eventypeid123",
+    "campaignId": "programid123"
+  };
 
 
 ___NOTES___
 
 Created on 10/11/2021, 09:29:27
-
-

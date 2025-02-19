@@ -1,5 +1,7 @@
 homepage: "https://stape.io/"
 versions:
+  - sha: 0dafffb12be5af94bf7b3791e9177c24a2e396df
+    changeNotes: Add GA4 parsing for items array item_name and item_category. Add some tests.
   - sha: c3ad666c45b678d1184d0e1cae5c57043f345f8e
     changeNotes: Update GA4 product parsing.
   - sha: 1074c5e9cfd5e4c08c615ea6163a6322c071b808
