@@ -17,9 +17,11 @@ const getTimestampMillis = require('getTimestampMillis');
 /*==============================================================================
   Main Execution
 ==============================================================================*/
-
-const traceId = getRequestHeader('trace-id');
 const eventData = getAllEventData();
+
+if (!isConsentGivenOrNotRequired(data, eventData)) {
+  return data.gtmOnSuccess();
+}
 
 if (data.type === 'page_view') {
   const url = eventData.page_location || getRequestHeader('referer');
@@ -117,32 +119,26 @@ if (data.type === 'page_view') {
     postBody.IpAddress = getRemoteAddress();
   }
 
-  log(
-    JSON.stringify({
-      Name: 'Impact',
-      Type: 'Request',
-      TraceId: traceId,
-      EventName: data.eventName,
-      RequestMethod: 'POST',
-      RequestUrl: requestUrl,
-      RequestBody: postBody
-    })
-  );
+  log({
+    Name: 'Impact',
+    Type: 'Request',
+    EventName: data.eventName,
+    RequestMethod: 'POST',
+    RequestUrl: requestUrl,
+    RequestBody: postBody
+  });
 
   sendHttpRequest(
     requestUrl,
     (statusCode, headers, body) => {
-      log(
-        JSON.stringify({
-          Name: 'Impact',
-          Type: 'Response',
-          TraceId: traceId,
-          EventName: data.eventName,
-          ResponseStatusCode: statusCode,
-          ResponseHeaders: headers,
-          ResponseBody: body
-        })
-      );
+      log({
+        Name: 'Impact',
+        Type: 'Response',
+        EventName: data.eventName,
+        ResponseStatusCode: statusCode,
+        ResponseHeaders: headers,
+        ResponseBody: body
+      });
 
       if (statusCode >= 200 && statusCode < 300) {
         data.gtmOnSuccess();

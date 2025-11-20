@@ -256,6 +256,13 @@ ___TEMPLATE_PARAMETERS___
         "simpleValueType": true,
         "defaultValue": "debug"
       }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "type",
+        "paramValue": "conversion",
+        "type": "EQUALS"
+      }
     ]
   },
   {
@@ -323,6 +330,13 @@ ___TEMPLATE_PARAMETERS___
           }
         ]
       }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "type",
+        "paramValue": "conversion",
+        "type": "EQUALS"
+      }
     ]
   }
 ]
@@ -349,11 +363,12 @@ const getTimestampMillis = require('getTimestampMillis');
 /*==============================================================================
   Main Execution
 ==============================================================================*/
-
-
-const isLoggingEnabled = determinateIsLoggingEnabled();
-const traceId = getRequestHeader('trace-id');
 const eventData = getAllEventData();
+
+if (!isConsentGivenOrNotRequired(data, eventData)) {
+  return data.gtmOnSuccess();
+}
+
 
 if (data.type === 'page_view') {
   const url = eventData.page_location || getRequestHeader('referer');
@@ -380,24 +395,26 @@ if (data.type === 'page_view') {
   let requestUrl = 'https://api.impact.com/Advertisers/"' + enc(data.accountSID) + '"/Conversions';
   const requestHeaders = {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'Authorization': 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
+    Accept: 'application/json',
+    Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
-  const postBody = data.additionalParameters ? makeTableMap(data.additionalParameters, 'name', 'value') : {};
+  const postBody = data.additionalParameters
+    ? makeTableMap(data.additionalParameters, 'name', 'value')
+    : {};
   let currencyFromItems = '';
   let couponFromItems = '';
   const impactNames = {
-    'id': 'ItemSku',
-    'name': 'ItemName',
-    'category': 'ItemCategory',
-    'quantity': 'ItemQuantity',
-    'price': 'ItemPrice'
+    id: 'ItemSku',
+    name: 'ItemName',
+    category: 'ItemCategory',
+    quantity: 'ItemQuantity',
+    price: 'ItemPrice'
   };
 
   postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-  postBody.EventDate =  'NOW';
-  postBody.EventTypeId =  data.eventTypeId;
-  postBody.CampaignId =  data.campaignId;
+  postBody.EventDate = 'NOW';
+  postBody.EventTypeId = data.eventTypeId;
+  postBody.CampaignId = data.campaignId;
   postBody.OrderId = data.orderId;
 
   if (data.productArray) {
@@ -405,8 +422,7 @@ if (data.type === 'page_view') {
       if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
       if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
 
-      if (data.productArray[i].sku)
-        postBody[impactNames.id + (i + 1)] = data.productArray[i].sku;
+      if (data.productArray[i].sku) postBody[impactNames.id + (i + 1)] = data.productArray[i].sku;
       else if (data.productArray[i].item_sku)
         postBody[impactNames.id + (i + 1)] = data.productArray[i].item_sku;
       else if (data.productArray[i].id)
@@ -450,39 +466,41 @@ if (data.type === 'page_view') {
     postBody.IpAddress = getRemoteAddress();
   }
 
-    log(JSON.stringify({
-      'Name': 'Impact',
-      'Type': 'Request',
-      'TraceId': traceId,
-      'EventName': data.eventName,
-      'RequestMethod': 'POST',
-      'RequestUrl': requestUrl,
-      'RequestBody': postBody,
-    }));
+  log({
+    Name: 'Impact',
+    Type: 'Request',
+    EventName: data.eventName,
+    RequestMethod: 'POST',
+    RequestUrl: requestUrl,
+    RequestBody: postBody
+  });
 
-  sendHttpRequest(requestUrl, (statusCode, headers, body) => {
-      log(JSON.stringify({
-        'Name': 'Impact',
-        'Type': 'Response',
-        'TraceId': traceId,
-        'EventName': data.eventName,
-        'ResponseStatusCode': statusCode,
-        'ResponseHeaders': headers,
-        'ResponseBody': body,
-      }));
+  sendHttpRequest(
+    requestUrl,
+    (statusCode, headers, body) => {
+      log({
+        Name: 'Impact',
+        Type: 'Response',
+        EventName: data.eventName,
+        ResponseStatusCode: statusCode,
+        ResponseHeaders: headers,
+        ResponseBody: body
+      });
 
-    if (statusCode >= 200 && statusCode < 300) {
-      data.gtmOnSuccess();
-    } else {
-      data.gtmOnFailure();
-    }
-  }, { headers: requestHeaders, method: 'POST' }, JSON.stringify(postBody));
+      if (statusCode >= 200 && statusCode < 300) {
+        data.gtmOnSuccess();
+      } else {
+        data.gtmOnFailure();
+      }
+    },
+    { headers: requestHeaders, method: 'POST' },
+    JSON.stringify(postBody)
+  );
 }
 
 /*==============================================================================
   Helpers
 ==============================================================================*/
-
 
 function enc(value) {
   value = value || '';
@@ -559,7 +577,10 @@ function logToBigQuery(dataToLog) {
 
 function determinateIsLoggingEnabled() {
   const containerVersion = getContainerVersion();
-  const isDebug = !!(containerVersion && (containerVersion.debugMode || containerVersion.previewMode));
+  const isDebug = !!(
+    containerVersion &&
+    (containerVersion.debugMode || containerVersion.previewMode)
+  );
 
   if (!data.logType) {
     return isDebug;
