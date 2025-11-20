@@ -155,8 +155,9 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "TEXT",
         "name": "productArray",
-        "displayName": "Array of products in EE format",
-        "simpleValueType": true
+        "displayName": "Array of products",
+        "simpleValueType": true,
+        "help": "Accepts GA4 \u003cb\u003eitems\u003c/b\u003e format or UA \u003cb\u003eproducts\u003c/b legacy format\u003e"
       },
       {
         "type": "CHECKBOX",
@@ -205,9 +206,35 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "GROUP",
-    "name": "logsGroup",
-    "displayName": "Logs Settings",
+    "name": "tagExecutionConsentSettingsGroup",
+    "displayName": "Tag Execution Consent Settings",
     "groupStyle": "ZIPPY_CLOSED",
+    "subParams": [
+      {
+        "type": "RADIO",
+        "name": "adStorageConsent",
+        "displayName": "",
+        "radioItems": [
+          {
+            "value": "optional",
+            "displayValue": "Send data always"
+          },
+          {
+            "value": "required",
+            "displayValue": "Send data in case marketing consent given",
+            "help": "Aborts the tag execution if marketing consent (\u003ci\u003ead_storage\u003c/i\u003e Google Consent Mode or Stape\u0027s Data Tag parameter) is not given."
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "optional"
+      }
+    ]
+  },
+  {
+    "displayName": "Logs Settings",
+    "name": "logsGroup",
+    "groupStyle": "ZIPPY_CLOSED",
+    "type": "GROUP",
     "subParams": [
       {
         "type": "RADIO",
@@ -229,12 +256,72 @@ ___TEMPLATE_PARAMETERS___
         "simpleValueType": true,
         "defaultValue": "debug"
       }
-    ],
-    "enablingConditions": [
+    ]
+  },
+  {
+    "displayName": "BigQuery Logs Settings",
+    "name": "bigQueryLogsGroup",
+    "groupStyle": "ZIPPY_CLOSED",
+    "type": "GROUP",
+    "subParams": [
       {
-        "paramName": "type",
-        "paramValue": "conversion",
-        "type": "EQUALS"
+        "type": "RADIO",
+        "name": "bigQueryLogType",
+        "radioItems": [
+          {
+            "value": "no",
+            "displayValue": "Do not log to BigQuery"
+          },
+          {
+            "value": "always",
+            "displayValue": "Log to BigQuery"
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "no"
+      },
+      {
+        "type": "GROUP",
+        "name": "logsBigQueryConfigGroup",
+        "groupStyle": "NO_ZIPPY",
+        "subParams": [
+          {
+            "type": "TEXT",
+            "name": "logBigQueryProjectId",
+            "displayName": "BigQuery Project ID",
+            "simpleValueType": true,
+            "help": "Optional.  \u003cbr\u003e\u003cbr\u003e  If omitted, it will be retrieved from the environment variable \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e where the server container is running. If the server container is running on Google Cloud, \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e will already be set to the Google Cloud project\u0027s ID."
+          },
+          {
+            "type": "TEXT",
+            "name": "logBigQueryDatasetId",
+            "displayName": "BigQuery Dataset ID",
+            "simpleValueType": true,
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ]
+          },
+          {
+            "type": "TEXT",
+            "name": "logBigQueryTableId",
+            "displayName": "BigQuery Table ID",
+            "simpleValueType": true,
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ]
+          }
+        ],
+        "enablingConditions": [
+          {
+            "paramName": "bigQueryLogType",
+            "paramValue": "always",
+            "type": "EQUALS"
+          }
+        ]
       }
     ]
   }
@@ -256,6 +343,13 @@ const getRemoteAddress = require('getRemoteAddress');
 const getAllEventData = require('getAllEventData');
 const logToConsole = require('logToConsole');
 const getContainerVersion = require('getContainerVersion');
+const BigQuery = require('BigQuery');
+const getTimestampMillis = require('getTimestampMillis');
+
+/*==============================================================================
+  Main Execution
+==============================================================================*/
+
 
 const isLoggingEnabled = determinateIsLoggingEnabled();
 const traceId = getRequestHeader('trace-id');
@@ -356,8 +450,7 @@ if (data.type === 'page_view') {
     postBody.IpAddress = getRemoteAddress();
   }
 
-  if (isLoggingEnabled) {
-    logToConsole(JSON.stringify({
+    log(JSON.stringify({
       'Name': 'Impact',
       'Type': 'Request',
       'TraceId': traceId,
@@ -366,11 +459,9 @@ if (data.type === 'page_view') {
       'RequestUrl': requestUrl,
       'RequestBody': postBody,
     }));
-  }
 
   sendHttpRequest(requestUrl, (statusCode, headers, body) => {
-    if (isLoggingEnabled) {
-      logToConsole(JSON.stringify({
+      log(JSON.stringify({
         'Name': 'Impact',
         'Type': 'Response',
         'TraceId': traceId,
@@ -379,7 +470,6 @@ if (data.type === 'page_view') {
         'ResponseHeaders': headers,
         'ResponseBody': body,
       }));
-    }
 
     if (statusCode >= 200 && statusCode < 300) {
       data.gtmOnSuccess();
@@ -389,17 +479,87 @@ if (data.type === 'page_view') {
   }, { headers: requestHeaders, method: 'POST' }, JSON.stringify(postBody));
 }
 
+/*==============================================================================
+  Helpers
+==============================================================================*/
+
+
 function enc(value) {
   value = value || '';
   return encodeUriComponent(value);
 }
 
+function isConsentGivenOrNotRequired(data, eventData) {
+  if (data.adStorageConsent !== 'required') return true;
+  if (eventData.consent_state) return !!eventData.consent_state.ad_storage;
+  const xGaGcs = eventData['x-ga-gcs'] || ''; // x-ga-gcs is a string like "G110"
+  return xGaGcs[2] === '1';
+}
+
+function log(rawDataToLog) {
+  const logDestinationsHandlers = {};
+  if (determinateIsLoggingEnabled()) logDestinationsHandlers.console = logConsole;
+  if (determinateIsLoggingEnabledForBigQuery()) logDestinationsHandlers.bigQuery = logToBigQuery;
+
+  rawDataToLog.TraceId = getRequestHeader('trace-id');
+
+  const keyMappings = {
+    // No transformation for Console is needed.
+    bigQuery: {
+      Name: 'tag_name',
+      Type: 'type',
+      TraceId: 'trace_id',
+      EventName: 'event_name',
+      RequestMethod: 'request_method',
+      RequestUrl: 'request_url',
+      RequestBody: 'request_body',
+      ResponseStatusCode: 'response_status_code',
+      ResponseHeaders: 'response_headers',
+      ResponseBody: 'response_body'
+    }
+  };
+
+  for (const logDestination in logDestinationsHandlers) {
+    const handler = logDestinationsHandlers[logDestination];
+    if (!handler) continue;
+
+    const mapping = keyMappings[logDestination];
+    const dataToLog = mapping ? {} : rawDataToLog;
+
+    if (mapping) {
+      for (const key in rawDataToLog) {
+        const mappedKey = mapping[key] || key;
+        dataToLog[mappedKey] = rawDataToLog[key];
+      }
+    }
+
+    handler(dataToLog);
+  }
+}
+
+function logConsole(dataToLog) {
+  logToConsole(JSON.stringify(dataToLog));
+}
+
+function logToBigQuery(dataToLog) {
+  const connectionInfo = {
+    projectId: data.logBigQueryProjectId,
+    datasetId: data.logBigQueryDatasetId,
+    tableId: data.logBigQueryTableId
+  };
+
+  dataToLog.timestamp = getTimestampMillis();
+
+  ['request_body', 'response_headers', 'response_body'].forEach((p) => {
+    dataToLog[p] = JSON.stringify(dataToLog[p]);
+  });
+
+  BigQuery.insert(connectionInfo, [dataToLog], { ignoreUnknownValues: true });
+}
+
 function determinateIsLoggingEnabled() {
   const containerVersion = getContainerVersion();
-  const isDebug = !!(
-    containerVersion &&
-    (containerVersion.debugMode || containerVersion.previewMode)
-  );
+  const isDebug = !!(containerVersion && (containerVersion.debugMode || containerVersion.previewMode));
 
   if (!data.logType) {
     return isDebug;
@@ -414,6 +574,11 @@ function determinateIsLoggingEnabled() {
   }
 
   return data.logType === 'always';
+}
+
+function determinateIsLoggingEnabledForBigQuery() {
+  if (data.bigQueryLogType === 'no') return false;
+  return data.bigQueryLogType === 'always';
 }
 
 
@@ -641,6 +806,16 @@ ___SERVER_PERMISSIONS___
       "param": []
     },
     "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "access_bigquery",
+        "versionId": "1"
+      },
+      "param": []
+    },
+    "isRequired": true
   }
 ]
 
@@ -676,3 +851,5 @@ setup: |-
 ___NOTES___
 
 Created on 10/11/2021, 09:29:27
+
+
