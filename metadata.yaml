@@ -1,6 +1,6 @@
-homepage: "https://stape.io/"
+homepage: 'https://stape.io/'
 versions:
-  - sha: 4f343e5471b8c3691cddfe572644bcc046d02d69
+  - sha: 2b0ffbf9471d6cc8ccc19012ca2d24606cdf9ad6
     changeNotes: Modified hint of products field. Added up to date logging standard.
   - sha: 0dafffb12be5af94bf7b3791e9177c24a2e396df
     changeNotes: Add GA4 parsing for items array item_name and item_category. Add some tests.
