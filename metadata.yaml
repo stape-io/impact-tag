@@ -1,4 +1,5 @@
 homepage: 'https://stape.io/'
+documentation: "https://github.com/stape-io/impact-tag"
 versions:
   - sha: 8016cecdf0b8288b57cd52054ed62af27c062944
     changeNotes: Modified hint of products field. Added up to date logging standard.
