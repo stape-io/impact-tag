@@ -1,7 +1,7 @@
 homepage: 'https://stape.io/'
-documentation: "https://github.com/stape-io/impact-tag"
+documentation: 'https://github.com/stape-io/impact-tag'
 versions:
-  - sha: 8016cecdf0b8288b57cd52054ed62af27c062944
+  - sha: 77bf161a330ee346cd66b516ae4e5333eb42a668
     changeNotes: Modified hint of products field. Added up to date logging standard.
   - sha: 0dafffb12be5af94bf7b3791e9177c24a2e396df
     changeNotes: Add GA4 parsing for items array item_name and item_category. Add some tests.
