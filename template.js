@@ -17,6 +17,7 @@ const getTimestampMillis = require('getTimestampMillis');
 /*==============================================================================
   Main Execution
 ==============================================================================*/
+
 const eventData = getAllEventData();
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
@@ -43,9 +44,9 @@ if (data.type === 'page_view') {
     }
   }
 
-  data.gtmOnSuccess();
+  return data.gtmOnSuccess();
 } else {
-  let requestUrl = 'https://api.impact.com/Advertisers/"' + enc(data.accountSID) + '"/Conversions';
+  let requestUrl = 'https://api.impact.com/Advertisers/' + enc(data.accountSID) + '/Conversions';
   const requestHeaders = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -128,7 +129,7 @@ if (data.type === 'page_view') {
     RequestBody: postBody
   });
 
-  sendHttpRequest(
+  return sendHttpRequest(
     requestUrl,
     (statusCode, headers, body) => {
       log({
