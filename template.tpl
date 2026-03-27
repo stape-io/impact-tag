@@ -188,7 +188,12 @@ ___TEMPLATE_PARAMETERS___
                 "type": "EQUALS"
               }
             ],
-            "help": "Enter your custom timestamp in \u003cb\u003emilliseconds\u003c/b\u003e (Unix Epoch standard)"
+            "help": "Enter your custom timestamp in \u003cb\u003emilliseconds\u003c/b\u003e (Unix Epoch standard). If this input does not match the standard, it will fallback to a Date.now() instance, ie, the moment when the tag fires.",
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ]
           }
         ]
       },
@@ -383,6 +388,7 @@ const getTimestampMillis = require('getTimestampMillis');
 const getType = require('getType');
 const logToConsole = require('logToConsole');
 const makeTableMap = require('makeTableMap');
+const makeNumber = require('makeNumber');
 const makeString = require('makeString');
 const Math = require('Math');
 const parseUrl = require('parseUrl');
@@ -395,7 +401,6 @@ const toBase64 = require('toBase64');
 ==============================================================================*/
 
 const eventData = getAllEventData();
-const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
@@ -429,6 +434,7 @@ if (data.type === 'page_view') {
     Accept: 'application/json',
     Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
+  const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
     : {};
@@ -539,6 +545,16 @@ function enc(data) {
 }
 
 function convertTimestampToISO(timestamp) {
+  if (getType(timestamp) === 'string' && !timestamp.match('^[0-9]+$')) {
+    timestamp = getTimestampMillis();
+  }
+
+  let numberTimestamp = makeNumber(timestamp);
+
+  if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
+    numberTimestamp = getTimestampMillis();
+  }
+  log(numberTimestamp);
   const secToMs = function (s) {
     return s * 1000;
   };
@@ -552,19 +568,20 @@ function convertTimestampToISO(timestamp) {
     return d * hoursToMs(24);
   };
   const format = function (value) {
-    return value >= 10 ? value.toString() : '0' + value;
+    return value >= 10 ? makeString(value) : '0' + makeString(value);
   };
+
   const fourYearsInMs = daysToMs(365 * 4 + 1);
-  let year = 1970 + Math.floor(timestamp / fourYearsInMs) * 4;
-  timestamp = timestamp % fourYearsInMs;
+  let year = 1970 + Math.floor(numberTimestamp / fourYearsInMs) * 4;
+  numberTimestamp = numberTimestamp % fourYearsInMs;
 
   while (true) {
     const isLeapYear = !(year % 4);
-    const nextTimestamp = timestamp - daysToMs(isLeapYear ? 366 : 365);
+    const nextTimestamp = numberTimestamp - daysToMs(isLeapYear ? 366 : 365);
     if (nextTimestamp < 0) {
       break;
     }
-    timestamp = nextTimestamp;
+    numberTimestamp = nextTimestamp;
     year = year + 1;
   }
 
@@ -576,20 +593,24 @@ function convertTimestampToISO(timestamp) {
   let month = 0;
   for (let i = 0; i < daysByMonth.length; i++) {
     const msInThisMonth = daysToMs(daysByMonth[i]);
-    if (timestamp > msInThisMonth) {
-      timestamp = timestamp - msInThisMonth;
+    if (numberTimestamp > msInThisMonth) {
+      numberTimestamp = numberTimestamp - msInThisMonth;
     } else {
       month = i + 1;
       break;
     }
   }
-  const date = Math.ceil(timestamp / daysToMs(1));
-  timestamp = timestamp - daysToMs(date - 1);
-  const hours = Math.floor(timestamp / hoursToMs(1));
-  timestamp = timestamp - hoursToMs(hours);
-  const minutes = Math.floor(timestamp / minToMs(1));
-  timestamp = timestamp - minToMs(minutes);
-  const sec = Math.floor(timestamp / secToMs(1));
+
+  const date = Math.ceil(numberTimestamp / daysToMs(1));
+  numberTimestamp = numberTimestamp - daysToMs(date - 1);
+
+  const hours = Math.floor(numberTimestamp / hoursToMs(1));
+  numberTimestamp = numberTimestamp - hoursToMs(hours);
+
+  const minutes = Math.floor(numberTimestamp / minToMs(1));
+  numberTimestamp = numberTimestamp - minToMs(minutes);
+
+  const sec = Math.floor(numberTimestamp / secToMs(1));
 
   return (
     year +
@@ -597,7 +618,7 @@ function convertTimestampToISO(timestamp) {
     format(month) +
     '-' +
     format(date) +
-    ' ' +
+    'T' +
     format(hours) +
     ':' +
     format(minutes) +
