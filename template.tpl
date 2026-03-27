@@ -171,6 +171,28 @@ ___TEMPLATE_PARAMETERS___
         "simpleValueType": true
       },
       {
+        "type": "CHECKBOX",
+        "name": "overrideTimestamp",
+        "checkboxText": "Override Timestamp",
+        "simpleValueType": true,
+        "subParams": [
+          {
+            "type": "TEXT",
+            "name": "customTimestamp",
+            "displayName": "Custom Timestamp",
+            "simpleValueType": true,
+            "enablingConditions": [
+              {
+                "paramName": "overrideTimestamp",
+                "paramValue": true,
+                "type": "EQUALS"
+              }
+            ],
+            "help": "Enter your custom timestamp in \u003cb\u003emilliseconds\u003c/b\u003e (Unix Epoch standard)"
+          }
+        ]
+      },
+      {
         "type": "GROUP",
         "name": "additionalParametersGroup",
         "displayName": "Additional Parameters",
@@ -349,27 +371,31 @@ ___TEMPLATE_PARAMETERS___
 
 ___SANDBOXED_JS_FOR_SERVER___
 
+const BigQuery = require('BigQuery');
+const JSON = require('JSON');
+const encodeUriComponent = require('encodeUriComponent');
+const getAllEventData = require('getAllEventData');
+const getContainerVersion = require('getContainerVersion');
+const getCookieValues = require('getCookieValues');
+const getRemoteAddress = require('getRemoteAddress');
+const getRequestHeader = require('getRequestHeader');
+const getTimestampMillis = require('getTimestampMillis');
+const getType = require('getType');
+const logToConsole = require('logToConsole');
+const makeTableMap = require('makeTableMap');
+const makeString = require('makeString');
+const Math = require('Math');
+const parseUrl = require('parseUrl');
 const sendHttpRequest = require('sendHttpRequest');
 const setCookie = require('setCookie');
-const parseUrl = require('parseUrl');
-const JSON = require('JSON');
-const getRequestHeader = require('getRequestHeader');
-const encodeUriComponent = require('encodeUriComponent');
-const getCookieValues = require('getCookieValues');
 const toBase64 = require('toBase64');
-const makeTableMap = require('makeTableMap');
-const getRemoteAddress = require('getRemoteAddress');
-const getAllEventData = require('getAllEventData');
-const logToConsole = require('logToConsole');
-const getContainerVersion = require('getContainerVersion');
-const BigQuery = require('BigQuery');
-const getTimestampMillis = require('getTimestampMillis');
 
 /*==============================================================================
   Main Execution
 ==============================================================================*/
 
 const eventData = getAllEventData();
+const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
@@ -417,7 +443,7 @@ if (data.type === 'page_view') {
   };
 
   postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-  postBody.EventDate = 'NOW';
+  postBody.EventDate = convertTimestampToISO(timestamp);
   postBody.EventTypeId = data.eventTypeId;
   postBody.CampaignId = data.campaignId;
   postBody.OrderId = data.orderId;
@@ -507,9 +533,78 @@ if (data.type === 'page_view') {
   Helpers
 ==============================================================================*/
 
-function enc(value) {
-  value = value || '';
-  return encodeUriComponent(value);
+function enc(data) {
+  if (['null', 'undefined'].indexOf(getType(data)) !== -1) data = '';
+  return encodeUriComponent(makeString(data));
+}
+
+function convertTimestampToISO(timestamp) {
+  const secToMs = function (s) {
+    return s * 1000;
+  };
+  const minToMs = function (m) {
+    return m * secToMs(60);
+  };
+  const hoursToMs = function (h) {
+    return h * minToMs(60);
+  };
+  const daysToMs = function (d) {
+    return d * hoursToMs(24);
+  };
+  const format = function (value) {
+    return value >= 10 ? value.toString() : '0' + value;
+  };
+  const fourYearsInMs = daysToMs(365 * 4 + 1);
+  let year = 1970 + Math.floor(timestamp / fourYearsInMs) * 4;
+  timestamp = timestamp % fourYearsInMs;
+
+  while (true) {
+    const isLeapYear = !(year % 4);
+    const nextTimestamp = timestamp - daysToMs(isLeapYear ? 366 : 365);
+    if (nextTimestamp < 0) {
+      break;
+    }
+    timestamp = nextTimestamp;
+    year = year + 1;
+  }
+
+  const daysByMonth =
+    year % 4 === 0
+      ? [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+      : [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  let month = 0;
+  for (let i = 0; i < daysByMonth.length; i++) {
+    const msInThisMonth = daysToMs(daysByMonth[i]);
+    if (timestamp > msInThisMonth) {
+      timestamp = timestamp - msInThisMonth;
+    } else {
+      month = i + 1;
+      break;
+    }
+  }
+  const date = Math.ceil(timestamp / daysToMs(1));
+  timestamp = timestamp - daysToMs(date - 1);
+  const hours = Math.floor(timestamp / hoursToMs(1));
+  timestamp = timestamp - hoursToMs(hours);
+  const minutes = Math.floor(timestamp / minToMs(1));
+  timestamp = timestamp - minToMs(minutes);
+  const sec = Math.floor(timestamp / secToMs(1));
+
+  return (
+    year +
+    '-' +
+    format(month) +
+    '-' +
+    format(date) +
+    ' ' +
+    format(hours) +
+    ':' +
+    format(minutes) +
+    ':' +
+    format(sec) +
+    '+00:00'
+  );
 }
 
 function isConsentGivenOrNotRequired(data, eventData) {
@@ -928,3 +1023,5 @@ setup: |-
 ___NOTES___
 
 Created on 10/11/2021, 09:29:27
+
+
