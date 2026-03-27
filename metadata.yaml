@@ -1,7 +1,7 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/impact-tag'
 versions:
-  - sha: 63fc431f7f9cc8e060f3ee1c851de00a3a5cb459
+  - sha: 83c6ca2a642014f499a3591cb62eae4de5f28446
     changeNotes: Fix EventDate static value. Add support to override it.
   - sha: 77bf161a330ee346cd66b516ae4e5333eb42a668
     changeNotes: Modified hint of products field. Added up to date logging standard.
