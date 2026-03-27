@@ -554,7 +554,7 @@ function convertTimestampToISO(timestamp) {
   if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
     numberTimestamp = getTimestampMillis();
   }
-  log(numberTimestamp);
+ 
   const secToMs = function (s) {
     return s * 1000;
   };
