@@ -1,18 +1,22 @@
+const BigQuery = require('BigQuery');
+const JSON = require('JSON');
+const encodeUriComponent = require('encodeUriComponent');
+const getAllEventData = require('getAllEventData');
+const getContainerVersion = require('getContainerVersion');
+const getCookieValues = require('getCookieValues');
+const getRemoteAddress = require('getRemoteAddress');
+const getRequestHeader = require('getRequestHeader');
+const getTimestampMillis = require('getTimestampMillis');
+const getType = require('getType');
+const logToConsole = require('logToConsole');
+const makeTableMap = require('makeTableMap');
+const makeNumber = require('makeNumber');
+const makeString = require('makeString');
+const Math = require('Math');
+const parseUrl = require('parseUrl');
 const sendHttpRequest = require('sendHttpRequest');
 const setCookie = require('setCookie');
-const parseUrl = require('parseUrl');
-const JSON = require('JSON');
-const getRequestHeader = require('getRequestHeader');
-const encodeUriComponent = require('encodeUriComponent');
-const getCookieValues = require('getCookieValues');
 const toBase64 = require('toBase64');
-const makeTableMap = require('makeTableMap');
-const getRemoteAddress = require('getRemoteAddress');
-const getAllEventData = require('getAllEventData');
-const logToConsole = require('logToConsole');
-const getContainerVersion = require('getContainerVersion');
-const BigQuery = require('BigQuery');
-const getTimestampMillis = require('getTimestampMillis');
 
 /*==============================================================================
   Main Execution
@@ -52,6 +56,7 @@ if (data.type === 'page_view') {
     Accept: 'application/json',
     Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
+  const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
     : {};
@@ -66,7 +71,7 @@ if (data.type === 'page_view') {
   };
 
   postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-  postBody.EventDate = 'NOW';
+  postBody.EventDate = convertTimestampToISO(timestamp);
   postBody.EventTypeId = data.eventTypeId;
   postBody.CampaignId = data.campaignId;
   postBody.OrderId = data.orderId;
@@ -156,9 +161,93 @@ if (data.type === 'page_view') {
   Helpers
 ==============================================================================*/
 
-function enc(value) {
-  value = value || '';
-  return encodeUriComponent(value);
+function enc(data) {
+  if (['null', 'undefined'].indexOf(getType(data)) !== -1) data = '';
+  return encodeUriComponent(makeString(data));
+}
+
+function convertTimestampToISO(timestamp) {
+  if (getType(timestamp) === 'string' && !timestamp.match('^[0-9]+$')) {
+    timestamp = getTimestampMillis();
+  }
+
+  let numberTimestamp = makeNumber(timestamp);
+
+  if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
+    numberTimestamp = getTimestampMillis();
+  }
+
+  const secToMs = function (s) {
+    return s * 1000;
+  };
+  const minToMs = function (m) {
+    return m * secToMs(60);
+  };
+  const hoursToMs = function (h) {
+    return h * minToMs(60);
+  };
+  const daysToMs = function (d) {
+    return d * hoursToMs(24);
+  };
+  const format = function (value) {
+    return value >= 10 ? makeString(value) : '0' + makeString(value);
+  };
+
+  const fourYearsInMs = daysToMs(365 * 4 + 1);
+  let year = 1970 + Math.floor(numberTimestamp / fourYearsInMs) * 4;
+  numberTimestamp = numberTimestamp % fourYearsInMs;
+
+  while (true) {
+    const isLeapYear = !(year % 4);
+    const nextTimestamp = numberTimestamp - daysToMs(isLeapYear ? 366 : 365);
+    if (nextTimestamp < 0) {
+      break;
+    }
+    numberTimestamp = nextTimestamp;
+    year = year + 1;
+  }
+
+  const daysByMonth =
+    year % 4 === 0
+      ? [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+      : [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  let month = 0;
+  for (let i = 0; i < daysByMonth.length; i++) {
+    const msInThisMonth = daysToMs(daysByMonth[i]);
+    if (numberTimestamp > msInThisMonth) {
+      numberTimestamp = numberTimestamp - msInThisMonth;
+    } else {
+      month = i + 1;
+      break;
+    }
+  }
+
+  const date = Math.ceil(numberTimestamp / daysToMs(1));
+  numberTimestamp = numberTimestamp - daysToMs(date - 1);
+
+  const hours = Math.floor(numberTimestamp / hoursToMs(1));
+  numberTimestamp = numberTimestamp - hoursToMs(hours);
+
+  const minutes = Math.floor(numberTimestamp / minToMs(1));
+  numberTimestamp = numberTimestamp - minToMs(minutes);
+
+  const sec = Math.floor(numberTimestamp / secToMs(1));
+
+  return (
+    year +
+    '-' +
+    format(month) +
+    '-' +
+    format(date) +
+    'T' +
+    format(hours) +
+    ':' +
+    format(minutes) +
+    ':' +
+    format(sec) +
+    '+00:00'
+  );
 }
 
 function isConsentGivenOrNotRequired(data, eventData) {
