@@ -35,65 +35,73 @@ ___TEMPLATE_PARAMETERS___
 
 [
   {
-    "type": "RADIO",
-    "name": "type",
-    "displayName": "Event Type",
-    "radioItems": [
+    "type": "GROUP",
+    "name": "configGroup",
+    "displayName": "",
+    "groupStyle": "NO_ZIPPY",
+    "subParams": [
       {
-        "value": "page_view",
-        "displayValue": "PageView"
+        "type": "RADIO",
+        "name": "type",
+        "displayName": "Event Type",
+        "radioItems": [
+          {
+            "value": "page_view",
+            "displayValue": "PageView"
+          },
+          {
+            "value": "conversion",
+            "displayValue": "Conversion"
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "page_view",
+        "help": "\u003cb\u003ePageView\u003c/b\u003e - stores the {clickid} URL parameter inside the impact_cid cookie\u003cbr\u003e\u003cbr\u003e\n\u003cb\u003eConversion\u003c/b\u003e - Send request with data about the conversion to the Impact"
       },
       {
-        "value": "conversion",
-        "displayValue": "Conversion"
-      }
-    ],
-    "simpleValueType": true,
-    "defaultValue": "page_view",
-    "help": "\u003cb\u003ePageView\u003c/b\u003e - stores the {clickid} URL parameter inside the impact_cid cookie\u003cbr\u003e\u003cbr\u003e\n\u003cb\u003eConversion\u003c/b\u003e - Send request with data about the conversion to the Impact"
-  },
-  {
-    "type": "TEXT",
-    "name": "clickIdParameterName",
-    "displayName": "Url parameter name for obtaining Impact clickid",
-    "simpleValueType": true,
-    "help": "Configured on the \u003ca target\u003d\"_blank\" href\u003d\"https://app.impact.com/secure/advertiser/tracking-settings/gateway-trackingsettings-flow.ihtml\"\u003eGateway Settings\u003c/a\u003e screen.",
-    "valueValidators": [
-      {
-        "type": "NON_EMPTY"
-      }
-    ],
-    "enablingConditions": [
-      {
-        "paramName": "type",
-        "paramValue": "page_view",
-        "type": "EQUALS"
-      }
-    ],
-    "defaultValue": "clickid"
-  },
-  {
-    "type": "TEXT",
-    "name": "expiration",
-    "displayName": "Expiration time for the impact_cid cookie in seconds.",
-    "simpleValueType": true,
-    "enablingConditions": [
-      {
-        "paramName": "type",
-        "paramValue": "page_view",
-        "type": "EQUALS"
-      }
-    ],
-    "valueValidators": [
-      {
-        "type": "NON_EMPTY"
+        "type": "TEXT",
+        "name": "clickIdParameterName",
+        "displayName": "Url parameter name for obtaining Impact clickid",
+        "simpleValueType": true,
+        "help": "Configured on the \u003ca target\u003d\"_blank\" href\u003d\"https://app.impact.com/secure/advertiser/tracking-settings/gateway-trackingsettings-flow.ihtml\"\u003eGateway Settings\u003c/a\u003e screen.",
+        "valueValidators": [
+          {
+            "type": "NON_EMPTY"
+          }
+        ],
+        "enablingConditions": [
+          {
+            "paramName": "type",
+            "paramValue": "page_view",
+            "type": "EQUALS"
+          }
+        ],
+        "defaultValue": "clickid"
       },
       {
-        "type": "NON_NEGATIVE_NUMBER"
+        "type": "TEXT",
+        "name": "expiration",
+        "displayName": "Expiration time for the impact_cid cookie in seconds.",
+        "simpleValueType": true,
+        "enablingConditions": [
+          {
+            "paramName": "type",
+            "paramValue": "page_view",
+            "type": "EQUALS"
+          }
+        ],
+        "valueValidators": [
+          {
+            "type": "NON_EMPTY"
+          },
+          {
+            "type": "NON_NEGATIVE_NUMBER"
+          }
+        ],
+        "defaultValue": 0,
+        "help": "Use 0 for saving only for the session."
       }
-    ],
-    "defaultValue": 0,
-    "help": "Use 0 for saving only for the session."
+    ]
   },
   {
     "type": "GROUP",
@@ -401,14 +409,17 @@ const toBase64 = require('toBase64');
 ==============================================================================*/
 
 const eventData = getAllEventData();
+const url = eventData.page_location || getRequestHeader('referer');
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
 }
 
-if (data.type === 'page_view') {
-  const url = eventData.page_location || getRequestHeader('referer');
+if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
+  return data.gtmOnSuccess();
+}
 
+if (data.type === 'page_view') {
   if (url) {
     const value = parseUrl(url).searchParams[data.clickIdParameterName];
 
@@ -434,6 +445,7 @@ if (data.type === 'page_view') {
     Accept: 'application/json',
     Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
+  const requestOptions = { headers: requestHeaders, method: 'POST' };
   const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
@@ -506,33 +518,37 @@ if (data.type === 'page_view') {
   log({
     Name: 'Impact',
     Type: 'Request',
-    EventName: data.eventName,
+    EventName: data.eventTypeId,
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
     RequestBody: postBody
   });
 
-  return sendHttpRequest(
-    requestUrl,
-    (statusCode, headers, body) => {
+  return sendHttpRequest(requestUrl, requestOptions, JSON.stringify(postBody))
+    .then((response) => {
       log({
         Name: 'Impact',
         Type: 'Response',
-        EventName: data.eventName,
-        ResponseStatusCode: statusCode,
-        ResponseHeaders: headers,
-        ResponseBody: body
+        EventName: data.eventTypeId,
+        ResponseStatusCode: response.statusCode,
+        ResponseHeaders: response.headers,
+        ResponseBody: postBody
       });
 
-      if (statusCode >= 200 && statusCode < 300) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         data.gtmOnSuccess();
       } else {
         data.gtmOnFailure();
       }
-    },
-    { headers: requestHeaders, method: 'POST' },
-    JSON.stringify(postBody)
-  );
+    })
+    .catch((error) => {
+      log({
+        Name: 'Impact',
+        Type: 'Message',
+        EventName: data.eventTypeId,
+        Message: 'API call failed'
+      });
+    });
 }
 
 /*==============================================================================
@@ -554,7 +570,7 @@ function convertTimestampToISO(timestamp) {
   if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
     numberTimestamp = getTimestampMillis();
   }
- 
+
   const secToMs = function (s) {
     return s * 1000;
   };
@@ -1024,15 +1040,20 @@ scenarios:
     mockData.orderId = 'orderid123';
     mockData.productArray = [{"item_id":"SKU_12345","item_name":"Stan and Friends Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":2.22,"index":0,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"green","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":10.01,"quantity":3},{"item_id":"SKU_12346","item_name":"Google Grey Women's Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":3.33,"index":1,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"gray","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":21.01,"promotion_id":"P_12345","promotion_name":"Summer Sale","quantity":2}];
 
-    mock('sendHttpRequest', function(url, callback, headers, body) {
-      assertThat(body).contains('"ItemName1":"Stan and Friends Tee"');
-      assertThat(body).contains('"ItemCategory1":"Apparel"');
-      assertThat(body).contains('"Google Grey Women\'s Tee"');
-      assertThat(body).contains('"ItemCategory2":"Apparel"');
+    mock('sendHttpRequest', function(url, options, body) {
+      const parsedBody = JSON.parse(body);
+      logToConsole(parsedBody);
+      assertThat(parsedBody.ItemName1).isEqualTo("Stan and Friends Tee");
+      assertThat(parsedBody.ItemCategory1).isEqualTo("Apparel");
+      assertThat(parsedBody.ItemName2).isEqualTo("Google Grey Women's Tee");
+      assertThat(parsedBody.ItemCategory2).isEqualTo("Apparel");
+      return Promise.create(resolve => resolve('{}'));
     });
 
     runCode(mockData);
 setup: |-
+  const Promise = require('Promise');
+  const JSON = require('JSON');
   const mockData = {
     "accountSID": "accountsid123",
     "authToken": "authtoken123",

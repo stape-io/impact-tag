@@ -23,14 +23,17 @@ const toBase64 = require('toBase64');
 ==============================================================================*/
 
 const eventData = getAllEventData();
+const url = eventData.page_location || getRequestHeader('referer');
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
 }
 
-if (data.type === 'page_view') {
-  const url = eventData.page_location || getRequestHeader('referer');
+if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
+  return data.gtmOnSuccess();
+}
 
+if (data.type === 'page_view') {
   if (url) {
     const value = parseUrl(url).searchParams[data.clickIdParameterName];
 
@@ -56,6 +59,7 @@ if (data.type === 'page_view') {
     Accept: 'application/json',
     Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
+  const requestOptions = { headers: requestHeaders, method: 'POST' };
   const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
@@ -128,33 +132,37 @@ if (data.type === 'page_view') {
   log({
     Name: 'Impact',
     Type: 'Request',
-    EventName: data.eventName,
+    EventName: data.eventTypeId,
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
     RequestBody: postBody
   });
 
-  return sendHttpRequest(
-    requestUrl,
-    (statusCode, headers, body) => {
+  return sendHttpRequest(requestUrl, requestOptions, JSON.stringify(postBody))
+    .then((response) => {
       log({
         Name: 'Impact',
         Type: 'Response',
-        EventName: data.eventName,
-        ResponseStatusCode: statusCode,
-        ResponseHeaders: headers,
-        ResponseBody: body
+        EventName: data.eventTypeId,
+        ResponseStatusCode: response.statusCode,
+        ResponseHeaders: response.headers,
+        ResponseBody: postBody
       });
 
-      if (statusCode >= 200 && statusCode < 300) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         data.gtmOnSuccess();
       } else {
         data.gtmOnFailure();
       }
-    },
-    { headers: requestHeaders, method: 'POST' },
-    JSON.stringify(postBody)
-  );
+    })
+    .catch((error) => {
+      log({
+        Name: 'Impact',
+        Type: 'Message',
+        EventName: data.eventTypeId,
+        Message: 'API call failed'
+      });
+    });
 }
 
 /*==============================================================================
