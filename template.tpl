@@ -1196,4 +1196,7 @@ ___NOTES___
 
 Created on 10/11/2021, 09:29:27
 
+04-07-2026
+changeNotes: Add catch log, guard clause and tests.
+
 
