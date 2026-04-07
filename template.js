@@ -177,13 +177,9 @@ function enc(data) {
 }
 
 function convertTimestampToISO(timestamp) {
-  if (getType(timestamp) === 'string' && !timestamp.match('^[0-9]+$')) {
-    timestamp = getTimestampMillis();
-  }
-
   let numberTimestamp = makeNumber(timestamp);
 
-  if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
+  if (numberTimestamp <= 0 || numberTimestamp !== numberTimestamp) {
     numberTimestamp = getTimestampMillis();
   }
 
@@ -207,14 +203,17 @@ function convertTimestampToISO(timestamp) {
   let year = 1970 + Math.floor(numberTimestamp / fourYearsInMs) * 4;
   numberTimestamp = numberTimestamp % fourYearsInMs;
 
-  while (true) {
+  let loopLimit = 0;
+  while (loopLimit < 5) {
     const isLeapYear = !(year % 4);
     const nextTimestamp = numberTimestamp - daysToMs(isLeapYear ? 366 : 365);
+
     if (nextTimestamp < 0) {
       break;
     }
     numberTimestamp = nextTimestamp;
     year = year + 1;
+    loopLimit++;
   }
 
   const daysByMonth =

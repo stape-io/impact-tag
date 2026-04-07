@@ -1,4 +1,12 @@
-﻿___INFO___
+﻿___TERMS_OF_SERVICE___
+
+By creating or modifying this file you agree to Google Tag Manager's Community
+Template Gallery Developer Terms of Service available at
+https://developers.google.com/tag-manager/gallery-tos (or such other URL as
+Google may provide), as modified from time to time.
+
+
+___INFO___
 
 {
   "type": "TAG",
@@ -555,13 +563,9 @@ function enc(data) {
 }
 
 function convertTimestampToISO(timestamp) {
-  if (getType(timestamp) === 'string' && !timestamp.match('^[0-9]+$')) {
-    timestamp = getTimestampMillis();
-  }
-
   let numberTimestamp = makeNumber(timestamp);
 
-  if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
+  if (numberTimestamp <= 0 || numberTimestamp !== numberTimestamp) {
     numberTimestamp = getTimestampMillis();
   }
 
@@ -585,14 +589,17 @@ function convertTimestampToISO(timestamp) {
   let year = 1970 + Math.floor(numberTimestamp / fourYearsInMs) * 4;
   numberTimestamp = numberTimestamp % fourYearsInMs;
 
-  while (true) {
+  let loopLimit = 0;
+  while (loopLimit < 5) {
     const isLeapYear = !(year % 4);
     const nextTimestamp = numberTimestamp - daysToMs(isLeapYear ? 366 : 365);
+
     if (nextTimestamp < 0) {
       break;
     }
     numberTimestamp = nextTimestamp;
     year = year + 1;
+    loopLimit++;
   }
 
   const daysByMonth =
@@ -1079,7 +1086,6 @@ scenarios:
       expiration: 86400 // 1 day
     };
 
-    // Mock a page_location that contains the clickid
     mock('getAllEventData', () => ({
       page_location: 'https://example.com/?clickid=impact12345'
     }));
@@ -1139,38 +1145,35 @@ scenarios:
       assertApi('gtmOnFailure').wasCalled();
     });
 - name: Early Return - Guard Clause (GTM Own code analysis)
-  code: |
-    mockData = { type: 'conversion' };
-
-    mock('getAllEventData', () => ({
-      page_location: 'https://gtm-msr.appspot.com/test'
-    }));
-
-    runCode(mockData);
-      assertApi('sendHttpRequest').wasNotCalled();
-      assertApi('gtmOnSuccess').wasCalled();
-- name: Product Name and Category are present on the request body
-  code: |-
-    const logToConsole = require('logToConsole');
-
-    mockData.type = 'conversion';
-    mockData.orderId = 'orderid123';
-    mockData.productArray = [{"item_id":"SKU_12345","item_name":"Stan and Friends Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":2.22,"index":0,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"green","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":10.01,"quantity":3},{"item_id":"SKU_12346","item_name":"Google Grey Women's Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":3.33,"index":1,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"gray","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":21.01,"promotion_id":"P_12345","promotion_name":"Summer Sale","quantity":2}];
-
-    mock('sendHttpRequest', function(url, options, body) {
-      const parsedBody = JSON.parse(body);
-      logToConsole(parsedBody);
-      assertThat(parsedBody.ItemName1).isEqualTo("Stan and Friends Tee");
-      assertThat(parsedBody.ItemCategory1).isEqualTo("Apparel");
-      assertThat(parsedBody.ItemName2).isEqualTo("Google Grey Women's Tee");
-      assertThat(parsedBody.ItemCategory2).isEqualTo("Apparel");
-      return Promise.create(resolve => resolve('{}'));
-    });
-
-    runCode(mockData);
+  code: "mockData = { \n  type: 'conversion',\n  adStorageConsent: 'optional'\n };\n\
+    \nmock('getAllEventData', () => ({\n  page_location: 'https://gtm-msr.appspot.com/earlyreturn',\n\
+    \  consent_state: {ad_storage: true},\n  'x-ga-gcs': 'G110'\n}));\n\nrunCode(mockData);\n\
+    \  assertApi('sendHttpRequest').wasNotCalled();\n  assertApi('gtmOnSuccess').wasCalled();\n"
+- name: Early Return - Guard Clause (Consent Denied from UI)
+  code: "mockData = { \n  type: 'conversion',\n  adStorageConsent: 'required'\n };\n\
+    \nmock('getAllEventData', () => ({\n  page_location: 'https://earlyreturn.test.com',\n\
+    \  consent_state: {ad_storage: false},\n  'x-ga-gcs': 'G110'\n}));\n\nrunCode(mockData);\n\
+    \  assertApi('sendHttpRequest').wasNotCalled();\n  assertApi('gtmOnSuccess').wasCalled();\n"
+- name: Early Return - Guard Clause (Consent Denied from GA header)
+  code: "mockData = { \n  type: 'conversion',\n  adStorageConsent: 'required'\n};\n\
+    \nmock('getAllEventData', () => ({\n  page_location: 'https://earlyreturn.test.com',\n\
+    \  consent_state: {ad_storage: false},\n  'x-ga-gcs': 'G100'\n  })\n);\n\nrunCode(mockData);\n\
+    \  assertApi('sendHttpRequest').wasNotCalled();\n  assertApi('gtmOnSuccess').wasCalled();\n"
+- name: Timestamp Overrides Correctly If Input Is Unsupported String
+  code: "const createRegex = require('createRegex');\nconst testRegex = require('testRegex');\n\
+    \nconst timestampIso8601Regex = createRegex('^\\\\d{4}-\\\\d{2}-\\\\d{2}T\\\\\
+    d{2}:\\\\d{2}:\\\\d{2}(\\\\.\\\\d+)?(Z|[+-]\\\\d{2}:\\\\d{2})$');\n\nmockData.overrideTimestamp\
+    \ =  true;\nmockData.customTimestamp = '123-unsupported-timestamp-string';\n\n\
+    \nmock('sendHttpRequest', (url, options, body) => {\n  const parsedBody = JSON.parse(body);\n\
+    \  const eventDateIsInCorrectFormat = testRegex(timestampIso8601Regex,parsedBody.EventDate);\n\
+    \  \n  assertThat(parsedBody.EventDate).isNotEqualTo('123-unsupported-timestamp-string');\
+    \     assertThat(eventDateIsInCorrectFormat).isTrue();\n  return Promise.create((resolve)\
+    \ => resolve({ statusCode: 200 }));\n});\n\nrunCode(mockData).then(() => {\n \
+    \ assertApi('gtmOnSuccess').wasCalled();\n});"
 setup: |-
   const Promise = require('Promise');
   const JSON = require('JSON');
+
   let mockData = {
     "accountSID": "accountsid123",
     "authToken": "authtoken123",
