@@ -132,7 +132,7 @@ if (data.type === 'page_view') {
   log({
     Name: 'Impact',
     Type: 'Request',
-    EventName: data.eventTypeId,
+    EventName: 'Conversion',
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
     RequestBody: postBody
@@ -143,10 +143,10 @@ if (data.type === 'page_view') {
       log({
         Name: 'Impact',
         Type: 'Response',
-        EventName: data.eventTypeId,
+        EventName: 'Conversion',
         ResponseStatusCode: response.statusCode,
         ResponseHeaders: response.headers,
-        ResponseBody: postBody
+        ResponseBody: response.body
       });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -159,9 +159,11 @@ if (data.type === 'page_view') {
       log({
         Name: 'Impact',
         Type: 'Message',
-        EventName: data.eventTypeId,
-        Message: 'API call failed'
+        EventName: 'Conversion',
+        Message: 'API call failed',
+        Reason: JSON.stringify(error)
       });
+      data.gtmOnFailure();
     });
 }
 

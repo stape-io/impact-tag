@@ -1,12 +1,4 @@
-﻿___TERMS_OF_SERVICE___
-
-By creating or modifying this file you agree to Google Tag Manager's Community
-Template Gallery Developer Terms of Service available at
-https://developers.google.com/tag-manager/gallery-tos (or such other URL as
-Google may provide), as modified from time to time.
-
-
-___INFO___
+﻿___INFO___
 
 {
   "type": "TAG",
@@ -518,7 +510,7 @@ if (data.type === 'page_view') {
   log({
     Name: 'Impact',
     Type: 'Request',
-    EventName: data.eventTypeId,
+    EventName: 'Conversion',
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
     RequestBody: postBody
@@ -529,10 +521,10 @@ if (data.type === 'page_view') {
       log({
         Name: 'Impact',
         Type: 'Response',
-        EventName: data.eventTypeId,
+        EventName: 'Conversion',
         ResponseStatusCode: response.statusCode,
         ResponseHeaders: response.headers,
-        ResponseBody: postBody
+        ResponseBody: response.body
       });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -545,9 +537,11 @@ if (data.type === 'page_view') {
       log({
         Name: 'Impact',
         Type: 'Message',
-        EventName: data.eventTypeId,
-        Message: 'API call failed'
+        EventName: 'Conversion',
+        Message: 'API call failed',
+        Reason: JSON.stringify(error)
       });
+      data.gtmOnFailure();
     });
 }
 
@@ -874,17 +868,62 @@ ___SERVER_PERMISSIONS___
       },
       "param": [
         {
+          "key": "headerWhitelist",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "headerName"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "trace-id"
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "headerName"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "referer"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "key": "headersAllowed",
+          "value": {
+            "type": 8,
+            "boolean": true
+          }
+        },
+        {
           "key": "requestAccess",
           "value": {
             "type": 1,
-            "string": "any"
+            "string": "specific"
           }
         },
         {
           "key": "headerAccess",
           "value": {
             "type": 1,
-            "string": "any"
+            "string": "specific"
           }
         },
         {
@@ -1032,6 +1071,84 @@ ___SERVER_PERMISSIONS___
 ___TESTS___
 
 scenarios:
+- name: Page View - Successfully Sets Cookie
+  code: |
+    mockData = {
+      type: 'page_view',
+      clickIdParameterName: 'clickid',
+      expiration: 86400 // 1 day
+    };
+
+    // Mock a page_location that contains the clickid
+    mock('getAllEventData', () => ({
+      page_location: 'https://example.com/?clickid=impact12345'
+    }));
+
+    mock('setCookie', (name, value, options) => {
+      assertThat(name).isEqualTo('impact_cid');
+      assertThat(value).isEqualTo('impact12345');
+      assertThat(options['max-age']).isEqualTo(86400);
+      assertThat(options.secure).isTrue();
+    });
+
+    runCode(mockData);
+
+      assertApi('sendHttpRequest').wasNotCalled();
+      assertApi('gtmOnSuccess').wasCalled();
+- name: Conversion - Successfully Builds URL and Payload
+  code: "mockData = {\n  type: 'conversion',\n  accountSID: 'testSID',\n  authToken:\
+    \ 'testAuth',\n  eventTypeId: 'event_99',\n  campaignId: 'camp_88',\n  orderId:\
+    \ 'ORDER-123',\n  useIP: true,\n  overrideTimestamp: true,\n  customTimestamp:\
+    \ 1775562730345, // 2021-01-01T00:00:00+00:00\n  productArray: [\n    { item_id:\
+    \ \"SKU1\", item_name: \"Tee\", price: 10, quantity: 1, item_category: \"Apparel\"\
+    \ }\n  ]\n};\n\nmock('getAllEventData', () => ({ event_name: 'purchase', currency:\
+    \ 'USD' }));\nmock('getCookieValues', () => ['impact_cookie_id']);\nmock('getRemoteAddress',\
+    \ () => '192.168.1.1');\nmock('toBase64', () => 'encodedAuthString');\n\nmock('sendHttpRequest',\
+    \ (url, options, body) => {\n  assertThat(url).isEqualTo('https://api.impact.com/Advertisers/testSID/Conversions');\n\
+    \  \n  assertThat(options.headers.Authorization).isEqualTo('Basic encodedAuthString');\n\
+    \  assertThat(options.headers['Content-Type']).isEqualTo('application/json');\n\
+    \n  const parsedBody = JSON.parse(body);\n  assertThat(parsedBody.ClickId).isEqualTo('impact_cookie_id');\n\
+    \  assertThat(parsedBody.EventDate).isEqualTo('2026-04-07T11:52:10+00:00');\n\
+    \  assertThat(parsedBody.OrderId).isEqualTo('ORDER-123');\n  assertThat(parsedBody.CurrencyCode).isEqualTo('USD');\n\
+    \  assertThat(parsedBody.IpAddress).isEqualTo('192.168.1.1');\n  \n  assertThat(parsedBody.ItemSku1).isEqualTo('SKU1');\n\
+    \  assertThat(parsedBody.ItemName1).isEqualTo('Tee');\n  assertThat(parsedBody.ItemPrice1).isEqualTo(10);\n\
+    \  assertThat(parsedBody.ItemQuantity1).isEqualTo(1);\n  assertThat(parsedBody.ItemCategory1).isEqualTo('Apparel');\n\
+    \n  return Promise.create((resolve) => resolve({ statusCode: 200 }));\n});\n\n\
+    runCode(mockData).then(() => {\n  assertApi('gtmOnSuccess').wasCalled();\n});"
+- name: Conversion - Handles API Rejections (400 Bad Request)
+  code: |-
+    mockData = {
+      type: 'conversion',
+      accountSID: 'testSID',
+      authToken: 'testAuth',
+      eventTypeId: 'event_99',
+      campaignId: 'camp_88',
+      orderId: 'ORDER-123'
+    };
+
+    mock('getAllEventData', () => ({ event_name: 'purchase' }));
+    mock('getCookieValues', () => []);
+
+    // Force a 400 rejection from the API
+    mock('sendHttpRequest', () => {
+      return Promise.create((resolve) => resolve({ statusCode: 400, body: '{"error":"bad data"}' }));
+    });
+
+    runCode(mockData).then(() => {
+      // Assert the tag fails gracefully
+      assertApi('gtmOnFailure').wasCalled();
+    });
+- name: Early Return - Guard Clause (GTM Own code analysis)
+  code: |
+    mockData = { type: 'conversion' };
+
+    mock('getAllEventData', () => ({
+      page_location: 'https://gtm-msr.appspot.com/test'
+    }));
+
+    runCode(mockData);
+      assertApi('sendHttpRequest').wasNotCalled();
+      assertApi('gtmOnSuccess').wasCalled();
 - name: Product Name and Category are present on the request body
   code: |-
     const logToConsole = require('logToConsole');
@@ -1054,12 +1171,22 @@ scenarios:
 setup: |-
   const Promise = require('Promise');
   const JSON = require('JSON');
-  const mockData = {
+  let mockData = {
     "accountSID": "accountsid123",
     "authToken": "authtoken123",
     "eventTypeId": "eventypeid123",
     "campaignId": "programid123"
   };
+
+  mock('getRequestHeader', () => '');
+  mock('getContainerVersion', () => ({ debugMode: true }));
+  mock('logToConsole', () => {});
+  mock('BigQuery', { insert: () => {} });
+  mock('getTimestampMillis', () => 1000000000000);
+
+  mock('sendHttpRequest', (url, options, body) => {
+    return Promise.create((resolve) => resolve({ statusCode: 200, headers: {}, body: '' }));
+  });
 
 
 ___NOTES___
