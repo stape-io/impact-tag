@@ -1,7 +1,7 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/impact-tag'
 versions:
-  - sha: 91a884494d84cf7acf6c79e51387574da8e4ea4c
+  - sha: dbc4fb7772a7a85e4aeaa254fbb15d0ba713d4a6
     changeNotes: Add catch log, guard clause and tests.
   - sha: 83c6ca2a642014f499a3591cb62eae4de5f28446
     changeNotes: Fix EventDate static value. Add support to override it.
