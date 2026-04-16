@@ -35,65 +35,73 @@ ___TEMPLATE_PARAMETERS___
 
 [
   {
-    "type": "RADIO",
-    "name": "type",
-    "displayName": "Event Type",
-    "radioItems": [
+    "type": "GROUP",
+    "name": "configGroup",
+    "displayName": "",
+    "groupStyle": "NO_ZIPPY",
+    "subParams": [
       {
-        "value": "page_view",
-        "displayValue": "PageView"
+        "type": "RADIO",
+        "name": "type",
+        "displayName": "Event Type",
+        "radioItems": [
+          {
+            "value": "page_view",
+            "displayValue": "PageView"
+          },
+          {
+            "value": "conversion",
+            "displayValue": "Conversion"
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "page_view",
+        "help": "\u003cb\u003ePageView\u003c/b\u003e - stores the {clickid} URL parameter inside the impact_cid cookie\u003cbr\u003e\u003cbr\u003e\n\u003cb\u003eConversion\u003c/b\u003e - Send request with data about the conversion to the Impact"
       },
       {
-        "value": "conversion",
-        "displayValue": "Conversion"
-      }
-    ],
-    "simpleValueType": true,
-    "defaultValue": "page_view",
-    "help": "\u003cb\u003ePageView\u003c/b\u003e - stores the {clickid} URL parameter inside the impact_cid cookie\u003cbr\u003e\u003cbr\u003e\n\u003cb\u003eConversion\u003c/b\u003e - Send request with data about the conversion to the Impact"
-  },
-  {
-    "type": "TEXT",
-    "name": "clickIdParameterName",
-    "displayName": "Url parameter name for obtaining Impact clickid",
-    "simpleValueType": true,
-    "help": "Configured on the \u003ca target\u003d\"_blank\" href\u003d\"https://app.impact.com/secure/advertiser/tracking-settings/gateway-trackingsettings-flow.ihtml\"\u003eGateway Settings\u003c/a\u003e screen.",
-    "valueValidators": [
-      {
-        "type": "NON_EMPTY"
-      }
-    ],
-    "enablingConditions": [
-      {
-        "paramName": "type",
-        "paramValue": "page_view",
-        "type": "EQUALS"
-      }
-    ],
-    "defaultValue": "clickid"
-  },
-  {
-    "type": "TEXT",
-    "name": "expiration",
-    "displayName": "Expiration time for the impact_cid cookie in seconds.",
-    "simpleValueType": true,
-    "enablingConditions": [
-      {
-        "paramName": "type",
-        "paramValue": "page_view",
-        "type": "EQUALS"
-      }
-    ],
-    "valueValidators": [
-      {
-        "type": "NON_EMPTY"
+        "type": "TEXT",
+        "name": "clickIdParameterName",
+        "displayName": "Url parameter name for obtaining Impact clickid",
+        "simpleValueType": true,
+        "help": "Configured on the \u003ca target\u003d\"_blank\" href\u003d\"https://app.impact.com/secure/advertiser/tracking-settings/gateway-trackingsettings-flow.ihtml\"\u003eGateway Settings\u003c/a\u003e screen.",
+        "valueValidators": [
+          {
+            "type": "NON_EMPTY"
+          }
+        ],
+        "enablingConditions": [
+          {
+            "paramName": "type",
+            "paramValue": "page_view",
+            "type": "EQUALS"
+          }
+        ],
+        "defaultValue": "clickid"
       },
       {
-        "type": "NON_NEGATIVE_NUMBER"
+        "type": "TEXT",
+        "name": "expiration",
+        "displayName": "Expiration time for the impact_cid cookie in seconds.",
+        "simpleValueType": true,
+        "enablingConditions": [
+          {
+            "paramName": "type",
+            "paramValue": "page_view",
+            "type": "EQUALS"
+          }
+        ],
+        "valueValidators": [
+          {
+            "type": "NON_EMPTY"
+          },
+          {
+            "type": "NON_NEGATIVE_NUMBER"
+          }
+        ],
+        "defaultValue": 0,
+        "help": "Use 0 for saving only for the session."
       }
-    ],
-    "defaultValue": 0,
-    "help": "Use 0 for saving only for the session."
+    ]
   },
   {
     "type": "GROUP",
@@ -401,14 +409,17 @@ const toBase64 = require('toBase64');
 ==============================================================================*/
 
 const eventData = getAllEventData();
+const url = eventData.page_location || getRequestHeader('referer');
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
 }
 
-if (data.type === 'page_view') {
-  const url = eventData.page_location || getRequestHeader('referer');
+if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
+  return data.gtmOnSuccess();
+}
 
+if (data.type === 'page_view') {
   if (url) {
     const value = parseUrl(url).searchParams[data.clickIdParameterName];
 
@@ -434,6 +445,7 @@ if (data.type === 'page_view') {
     Accept: 'application/json',
     Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
+  const requestOptions = { headers: requestHeaders, method: 'POST' };
   const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
@@ -448,13 +460,13 @@ if (data.type === 'page_view') {
     price: 'ItemPrice'
   };
 
-  postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-  postBody.EventDate = convertTimestampToISO(timestamp);
-  postBody.EventTypeId = data.eventTypeId;
-  postBody.CampaignId = data.campaignId;
-  postBody.OrderId = data.orderId;
+  postBody.ClickId = postBody.ClickId || (getCookieValues('impact_cid') || [])[0] || '';
+  postBody.EventDate = postBody.EventDate || convertTimestampToISO(timestamp);
+  postBody.EventTypeId = postBody.EventTypeId || data.eventTypeId;
+  postBody.CampaignId = postBody.CampaignId || data.campaignId;
+  postBody.OrderId = postBody.OrderId || data.orderId;
 
-  if (data.productArray) {
+  if (data.productArray && getType(data.productArray) === 'array') {
     for (let i = 0; i < data.productArray.length; i++) {
       if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
       if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
@@ -506,33 +518,39 @@ if (data.type === 'page_view') {
   log({
     Name: 'Impact',
     Type: 'Request',
-    EventName: data.eventName,
+    EventName: 'Conversion',
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
     RequestBody: postBody
   });
 
-  return sendHttpRequest(
-    requestUrl,
-    (statusCode, headers, body) => {
+  return sendHttpRequest(requestUrl, requestOptions, JSON.stringify(postBody))
+    .then((response) => {
       log({
         Name: 'Impact',
         Type: 'Response',
-        EventName: data.eventName,
-        ResponseStatusCode: statusCode,
-        ResponseHeaders: headers,
-        ResponseBody: body
+        EventName: 'Conversion',
+        ResponseStatusCode: response.statusCode,
+        ResponseHeaders: response.headers,
+        ResponseBody: response.body
       });
 
-      if (statusCode >= 200 && statusCode < 300) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         data.gtmOnSuccess();
       } else {
         data.gtmOnFailure();
       }
-    },
-    { headers: requestHeaders, method: 'POST' },
-    JSON.stringify(postBody)
-  );
+    })
+    .catch((error) => {
+      log({
+        Name: 'Impact',
+        Type: 'Message',
+        EventName: 'Conversion',
+        Message: 'API call failed',
+        Reason: makeString(error.message || error.reason)
+      });
+      data.gtmOnFailure();
+    });
 }
 
 /*==============================================================================
@@ -545,16 +563,12 @@ function enc(data) {
 }
 
 function convertTimestampToISO(timestamp) {
-  if (getType(timestamp) === 'string' && !timestamp.match('^[0-9]+$')) {
-    timestamp = getTimestampMillis();
-  }
-
   let numberTimestamp = makeNumber(timestamp);
 
-  if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
+  if (numberTimestamp <= 0 || numberTimestamp !== numberTimestamp) {
     numberTimestamp = getTimestampMillis();
   }
- 
+
   const secToMs = function (s) {
     return s * 1000;
   };
@@ -575,14 +589,17 @@ function convertTimestampToISO(timestamp) {
   let year = 1970 + Math.floor(numberTimestamp / fourYearsInMs) * 4;
   numberTimestamp = numberTimestamp % fourYearsInMs;
 
-  while (true) {
+  let loopLimit = 0;
+  while (loopLimit < 5) {
     const isLeapYear = !(year % 4);
     const nextTimestamp = numberTimestamp - daysToMs(isLeapYear ? 366 : 365);
+
     if (nextTimestamp < 0) {
       break;
     }
     numberTimestamp = nextTimestamp;
     year = year + 1;
+    loopLimit++;
   }
 
   const daysByMonth =
@@ -724,6 +741,8 @@ function determinateIsLoggingEnabledForBigQuery() {
 }
 
 
+
+
 ___SERVER_PERMISSIONS___
 
 [
@@ -858,17 +877,62 @@ ___SERVER_PERMISSIONS___
       },
       "param": [
         {
+          "key": "headerWhitelist",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "headerName"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "trace-id"
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "headerName"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "referer"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "key": "headersAllowed",
+          "value": {
+            "type": 8,
+            "boolean": true
+          }
+        },
+        {
           "key": "requestAccess",
           "value": {
             "type": 1,
-            "string": "any"
+            "string": "specific"
           }
         },
         {
           "key": "headerAccess",
           "value": {
             "type": 1,
-            "string": "any"
+            "string": "specific"
           }
         },
         {
@@ -1016,33 +1080,125 @@ ___SERVER_PERMISSIONS___
 ___TESTS___
 
 scenarios:
-- name: Product Name and Category are present on the request body
-  code: |-
-    const logToConsole = require('logToConsole');
+- name: Page View - Successfully Sets Cookie
+  code: |
+    mockData = {
+      type: 'page_view',
+      clickIdParameterName: 'clickid',
+      expiration: 86400 // 1 day
+    };
 
-    mockData.type = 'conversion';
-    mockData.orderId = 'orderid123';
-    mockData.productArray = [{"item_id":"SKU_12345","item_name":"Stan and Friends Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":2.22,"index":0,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"green","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":10.01,"quantity":3},{"item_id":"SKU_12346","item_name":"Google Grey Women's Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":3.33,"index":1,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"gray","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":21.01,"promotion_id":"P_12345","promotion_name":"Summer Sale","quantity":2}];
+    mock('getAllEventData', () => ({
+      page_location: 'https://example.com/?clickid=impact12345'
+    }));
 
-    mock('sendHttpRequest', function(url, callback, headers, body) {
-      assertThat(body).contains('"ItemName1":"Stan and Friends Tee"');
-      assertThat(body).contains('"ItemCategory1":"Apparel"');
-      assertThat(body).contains('"Google Grey Women\'s Tee"');
-      assertThat(body).contains('"ItemCategory2":"Apparel"');
+    mock('setCookie', (name, value, options) => {
+      assertThat(name).isEqualTo('impact_cid');
+      assertThat(value).isEqualTo('impact12345');
+      assertThat(options['max-age']).isEqualTo(86400);
+      assertThat(options.secure).isTrue();
     });
 
     runCode(mockData);
+
+      assertApi('sendHttpRequest').wasNotCalled();
+      assertApi('gtmOnSuccess').wasCalled();
+- name: Conversion - Successfully Builds URL and Payload
+  code: "mockData = {\n  type: 'conversion',\n  accountSID: 'testSID',\n  authToken:\
+    \ 'testAuth',\n  eventTypeId: 'event_99',\n  campaignId: 'camp_88',\n  orderId:\
+    \ 'ORDER-123',\n  useIP: true,\n  overrideTimestamp: true,\n  customTimestamp:\
+    \ 1775562730345, // 2026-04-07T11:52:10+00:00\n  productArray: [\n    { item_id:\
+    \ \"SKU1\", item_name: \"Tee\", price: 10, quantity: 1, item_category: \"Apparel\"\
+    \ }\n  ]\n};\n\nmock('getAllEventData', () => ({ event_name: 'purchase', currency:\
+    \ 'USD' }));\nmock('getCookieValues', () => ['impact_cookie_id']);\nmock('getRemoteAddress',\
+    \ () => '192.168.1.1');\nmock('toBase64', () => 'encodedAuthString');\n\nmock('sendHttpRequest',\
+    \ (url, options, body) => {\n  assertThat(url).isEqualTo('https://api.impact.com/Advertisers/testSID/Conversions');\n\
+    \  \n  assertThat(options.headers.Authorization).isEqualTo('Basic encodedAuthString');\n\
+    \  assertThat(options.headers['Content-Type']).isEqualTo('application/json');\n\
+    \n  const parsedBody = JSON.parse(body);\n  assertThat(parsedBody.ClickId).isEqualTo('impact_cookie_id');\n\
+    \  assertThat(parsedBody.EventDate).isEqualTo('2026-04-07T11:52:10+00:00');\n\
+    \  assertThat(parsedBody.OrderId).isEqualTo('ORDER-123');\n  assertThat(parsedBody.CurrencyCode).isEqualTo('USD');\n\
+    \  assertThat(parsedBody.IpAddress).isEqualTo('192.168.1.1');\n  \n  assertThat(parsedBody.ItemSku1).isEqualTo('SKU1');\n\
+    \  assertThat(parsedBody.ItemName1).isEqualTo('Tee');\n  assertThat(parsedBody.ItemPrice1).isEqualTo(10);\n\
+    \  assertThat(parsedBody.ItemQuantity1).isEqualTo(1);\n  assertThat(parsedBody.ItemCategory1).isEqualTo('Apparel');\n\
+    \n  return Promise.create((resolve) => resolve({ statusCode: 200 }));\n});\n\n\
+    runCode(mockData).then(() => {\n  assertApi('gtmOnSuccess').wasCalled();\n});"
+- name: Conversion - Handles API Rejections (400 Bad Request)
+  code: |-
+    mockData = {
+      type: 'conversion',
+      accountSID: 'testSID',
+      authToken: 'testAuth',
+      eventTypeId: 'event_99',
+      campaignId: 'camp_88',
+      orderId: 'ORDER-123'
+    };
+
+    mock('getAllEventData', () => ({ event_name: 'purchase' }));
+    mock('getCookieValues', () => []);
+
+    // Force a 400 rejection from the API
+    mock('sendHttpRequest', () => {
+      return Promise.create((resolve) => resolve({ statusCode: 400, body: '{"error":"bad data"}' }));
+    });
+
+    runCode(mockData).then(() => {
+      // Assert the tag fails gracefully
+      assertApi('gtmOnFailure').wasCalled();
+    });
+- name: Early Return - Guard Clause (GTM Own code analysis)
+  code: "mockData = { \n  type: 'conversion',\n  adStorageConsent: 'optional'\n };\n\
+    \nmock('getAllEventData', () => ({\n  page_location: 'https://gtm-msr.appspot.com/earlyreturn',\n\
+    \  consent_state: {ad_storage: true},\n  'x-ga-gcs': 'G110'\n}));\n\nrunCode(mockData);\n\
+    \  assertApi('sendHttpRequest').wasNotCalled();\n  assertApi('gtmOnSuccess').wasCalled();\n"
+- name: Early Return - Guard Clause (Consent Denied from UI)
+  code: "mockData = { \n  type: 'conversion',\n  adStorageConsent: 'required'\n };\n\
+    \nmock('getAllEventData', () => ({\n  page_location: 'https://earlyreturn.test.com',\n\
+    \  consent_state: {ad_storage: false},\n  'x-ga-gcs': 'G110'\n}));\n\nrunCode(mockData);\n\
+    \  assertApi('sendHttpRequest').wasNotCalled();\n  assertApi('gtmOnSuccess').wasCalled();\n"
+- name: Early Return - Guard Clause (Consent Denied from GA header)
+  code: "mockData = { \n  type: 'conversion',\n  adStorageConsent: 'required'\n};\n\
+    \nmock('getAllEventData', () => ({\n  page_location: 'https://earlyreturn.test.com',\n\
+    \  consent_state: {ad_storage: false},\n  'x-ga-gcs': 'G100'\n  })\n);\n\nrunCode(mockData);\n\
+    \  assertApi('sendHttpRequest').wasNotCalled();\n  assertApi('gtmOnSuccess').wasCalled();\n"
+- name: Timestamp Overrides Correctly If Input Is Unsupported String
+  code: "const createRegex = require('createRegex');\nconst testRegex = require('testRegex');\n\
+    \nconst timestampIso8601Regex = createRegex('^\\\\d{4}-\\\\d{2}-\\\\d{2}T\\\\\
+    d{2}:\\\\d{2}:\\\\d{2}(\\\\.\\\\d+)?(Z|[+-]\\\\d{2}:\\\\d{2})$');\n\nmockData.overrideTimestamp\
+    \ =  true;\nmockData.customTimestamp = '123-unsupported-timestamp-string';\n\n\
+    \nmock('sendHttpRequest', (url, options, body) => {\n  const parsedBody = JSON.parse(body);\n\
+    \  const eventDateIsInCorrectFormat = testRegex(timestampIso8601Regex,parsedBody.EventDate);\n\
+    \  \n  assertThat(parsedBody.EventDate).isNotEqualTo('123-unsupported-timestamp-string');\
+    \     assertThat(eventDateIsInCorrectFormat).isTrue();\n  return Promise.create((resolve)\
+    \ => resolve({ statusCode: 200 }));\n});\n\nrunCode(mockData).then(() => {\n \
+    \ assertApi('gtmOnSuccess').wasCalled();\n});"
 setup: |-
-  const mockData = {
+  const Promise = require('Promise');
+  const JSON = require('JSON');
+
+  let mockData = {
     "accountSID": "accountsid123",
     "authToken": "authtoken123",
     "eventTypeId": "eventypeid123",
     "campaignId": "programid123"
   };
 
+  mock('getRequestHeader', () => '');
+  mock('getContainerVersion', () => ({ debugMode: true }));
+  mock('logToConsole', () => {});
+  mock('BigQuery', { insert: () => {} });
+  mock('getTimestampMillis', () => 1000000000000);
+
+  mock('sendHttpRequest', (url, options, body) => {
+    return Promise.create((resolve) => resolve({ statusCode: 200, headers: {}, body: '' }));
+  });
+
 
 ___NOTES___
 
 Created on 10/11/2021, 09:29:27
+
+04-07-2026
+changeNotes: Add catch log, guard clause and tests.
 
 

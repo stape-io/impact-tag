@@ -23,14 +23,17 @@ const toBase64 = require('toBase64');
 ==============================================================================*/
 
 const eventData = getAllEventData();
+const url = eventData.page_location || getRequestHeader('referer');
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
 }
 
-if (data.type === 'page_view') {
-  const url = eventData.page_location || getRequestHeader('referer');
+if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
+  return data.gtmOnSuccess();
+}
 
+if (data.type === 'page_view') {
   if (url) {
     const value = parseUrl(url).searchParams[data.clickIdParameterName];
 
@@ -56,6 +59,7 @@ if (data.type === 'page_view') {
     Accept: 'application/json',
     Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
+  const requestOptions = { headers: requestHeaders, method: 'POST' };
   const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
@@ -70,13 +74,13 @@ if (data.type === 'page_view') {
     price: 'ItemPrice'
   };
 
-  postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-  postBody.EventDate = convertTimestampToISO(timestamp);
-  postBody.EventTypeId = data.eventTypeId;
-  postBody.CampaignId = data.campaignId;
-  postBody.OrderId = data.orderId;
+  postBody.ClickId = postBody.ClickId || (getCookieValues('impact_cid') || [])[0] || '';
+  postBody.EventDate = postBody.EventDate || convertTimestampToISO(timestamp);
+  postBody.EventTypeId = postBody.EventTypeId || data.eventTypeId;
+  postBody.CampaignId = postBody.CampaignId || data.campaignId;
+  postBody.OrderId = postBody.OrderId || data.orderId;
 
-  if (data.productArray) {
+  if (data.productArray && getType(data.productArray) === 'array') {
     for (let i = 0; i < data.productArray.length; i++) {
       if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
       if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
@@ -128,33 +132,39 @@ if (data.type === 'page_view') {
   log({
     Name: 'Impact',
     Type: 'Request',
-    EventName: data.eventName,
+    EventName: 'Conversion',
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
     RequestBody: postBody
   });
 
-  return sendHttpRequest(
-    requestUrl,
-    (statusCode, headers, body) => {
+  return sendHttpRequest(requestUrl, requestOptions, JSON.stringify(postBody))
+    .then((response) => {
       log({
         Name: 'Impact',
         Type: 'Response',
-        EventName: data.eventName,
-        ResponseStatusCode: statusCode,
-        ResponseHeaders: headers,
-        ResponseBody: body
+        EventName: 'Conversion',
+        ResponseStatusCode: response.statusCode,
+        ResponseHeaders: response.headers,
+        ResponseBody: response.body
       });
 
-      if (statusCode >= 200 && statusCode < 300) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         data.gtmOnSuccess();
       } else {
         data.gtmOnFailure();
       }
-    },
-    { headers: requestHeaders, method: 'POST' },
-    JSON.stringify(postBody)
-  );
+    })
+    .catch((error) => {
+      log({
+        Name: 'Impact',
+        Type: 'Message',
+        EventName: 'Conversion',
+        Message: 'API call failed',
+        Reason: makeString(error.message || error.reason)
+      });
+      data.gtmOnFailure();
+    });
 }
 
 /*==============================================================================
@@ -167,13 +177,9 @@ function enc(data) {
 }
 
 function convertTimestampToISO(timestamp) {
-  if (getType(timestamp) === 'string' && !timestamp.match('^[0-9]+$')) {
-    timestamp = getTimestampMillis();
-  }
-
   let numberTimestamp = makeNumber(timestamp);
 
-  if (getType(numberTimestamp) !== 'number' || numberTimestamp <= 0) {
+  if (numberTimestamp <= 0 || numberTimestamp !== numberTimestamp) {
     numberTimestamp = getTimestampMillis();
   }
 
@@ -197,14 +203,17 @@ function convertTimestampToISO(timestamp) {
   let year = 1970 + Math.floor(numberTimestamp / fourYearsInMs) * 4;
   numberTimestamp = numberTimestamp % fourYearsInMs;
 
-  while (true) {
+  let loopLimit = 0;
+  while (loopLimit < 5) {
     const isLeapYear = !(year % 4);
     const nextTimestamp = numberTimestamp - daysToMs(isLeapYear ? 366 : 365);
+
     if (nextTimestamp < 0) {
       break;
     }
     numberTimestamp = nextTimestamp;
     year = year + 1;
+    loopLimit++;
   }
 
   const daysByMonth =
