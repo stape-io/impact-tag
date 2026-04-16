@@ -74,13 +74,13 @@ if (data.type === 'page_view') {
     price: 'ItemPrice'
   };
 
-  postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-  postBody.EventDate = convertTimestampToISO(timestamp);
-  postBody.EventTypeId = data.eventTypeId;
-  postBody.CampaignId = data.campaignId;
-  postBody.OrderId = data.orderId;
+  postBody.ClickId = postBody.ClickId || (getCookieValues('impact_cid') || [])[0] || '';
+  postBody.EventDate = postBody.EventDate || convertTimestampToISO(timestamp);
+  postBody.EventTypeId = postBody.EventTypeId || data.eventTypeId;
+  postBody.CampaignId = postBody.CampaignId || data.campaignId;
+  postBody.OrderId = postBody.OrderId || data.orderId;
 
-  if (data.productArray) {
+  if (data.productArray && getType(data.productArray) === 'array') {
     for (let i = 0; i < data.productArray.length; i++) {
       if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
       if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
@@ -161,7 +161,7 @@ if (data.type === 'page_view') {
         Type: 'Message',
         EventName: 'Conversion',
         Message: 'API call failed',
-        Reason: JSON.stringify(error)
+        Reason: makeString(error.message || error.reason)
       });
       data.gtmOnFailure();
     });

@@ -460,13 +460,13 @@ if (data.type === 'page_view') {
     price: 'ItemPrice'
   };
 
-  postBody.ClickId = getCookieValues('impact_cid')[0] || '';
-  postBody.EventDate = convertTimestampToISO(timestamp);
-  postBody.EventTypeId = data.eventTypeId;
-  postBody.CampaignId = data.campaignId;
-  postBody.OrderId = data.orderId;
+  postBody.ClickId = postBody.ClickId || (getCookieValues('impact_cid') || [])[0] || '';
+  postBody.EventDate = postBody.EventDate || convertTimestampToISO(timestamp);
+  postBody.EventTypeId = postBody.EventTypeId || data.eventTypeId;
+  postBody.CampaignId = postBody.CampaignId || data.campaignId;
+  postBody.OrderId = postBody.OrderId || data.orderId;
 
-  if (data.productArray) {
+  if (data.productArray && getType(data.productArray) === 'array') {
     for (let i = 0; i < data.productArray.length; i++) {
       if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
       if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
@@ -547,7 +547,7 @@ if (data.type === 'page_view') {
         Type: 'Message',
         EventName: 'Conversion',
         Message: 'API call failed',
-        Reason: JSON.stringify(error)
+        Reason: makeString(error.message || error.reason)
       });
       data.gtmOnFailure();
     });
@@ -739,6 +739,8 @@ function determinateIsLoggingEnabledForBigQuery() {
   if (data.bigQueryLogType === 'no') return false;
   return data.bigQueryLogType === 'always';
 }
+
+
 
 
 ___SERVER_PERMISSIONS___
@@ -1105,7 +1107,7 @@ scenarios:
   code: "mockData = {\n  type: 'conversion',\n  accountSID: 'testSID',\n  authToken:\
     \ 'testAuth',\n  eventTypeId: 'event_99',\n  campaignId: 'camp_88',\n  orderId:\
     \ 'ORDER-123',\n  useIP: true,\n  overrideTimestamp: true,\n  customTimestamp:\
-    \ 1775562730345, // 2021-01-01T00:00:00+00:00\n  productArray: [\n    { item_id:\
+    \ 1775562730345, // 2026-04-07T11:52:10+00:00\n  productArray: [\n    { item_id:\
     \ \"SKU1\", item_name: \"Tee\", price: 10, quantity: 1, item_category: \"Apparel\"\
     \ }\n  ]\n};\n\nmock('getAllEventData', () => ({ event_name: 'purchase', currency:\
     \ 'USD' }));\nmock('getCookieValues', () => ['impact_cookie_id']);\nmock('getRemoteAddress',\

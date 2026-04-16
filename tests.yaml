@@ -1,18 +1,37 @@
+setup: |-
+  const Promise = require('Promise');
+  const JSON = require('JSON');
+
+  let mockData = {
+    accountSID: 'accountsid123',
+    authToken: 'authtoken123',
+    eventTypeId: 'eventypeid123',
+    campaignId: 'programid123'
+  };
+
+  mock('getRequestHeader', () => '');
+  mock('getContainerVersion', () => ({ debugMode: true }));
+  mock('logToConsole', () => {});
+  mock('BigQuery', { insert: () => {} });
+  mock('getTimestampMillis', () => 1000000000000);
+
+  mock('sendHttpRequest', (url, options, body) => {
+    return Promise.create((resolve) => resolve({ statusCode: 200, headers: {}, body: '' }));
+  });
+
 scenarios:
   - name: Page View - Successfully Sets Cookie
     code: |-
-      const mockData = {
+      mockData = {
         type: 'page_view',
         clickIdParameterName: 'clickid',
         expiration: 86400 // 1 day
       };
 
-      // Mock a page_location that contains the clickid
       mock('getAllEventData', () => ({
         page_location: 'https://example.com/?clickid=impact12345'
       }));
 
-      // Mock the setCookie API to assert it works
       mock('setCookie', (name, value, options) => {
         assertThat(name).isEqualTo('impact_cid');
         assertThat(value).isEqualTo('impact12345');
@@ -20,13 +39,14 @@ scenarios:
         assertThat(options.secure).isTrue();
       });
 
-      runCode(mockData).then(() => {
-        assertApi('gtmOnSuccess').wasCalled();
-      });
+      runCode(mockData);
+
+      assertApi('sendHttpRequest').wasNotCalled();
+      assertApi('gtmOnSuccess').wasCalled();
 
   - name: Conversion - Successfully Builds URL and Payload
     code: |-
-      const mockData = {
+      mockData = {
         type: 'conversion',
         accountSID: 'testSID',
         authToken: 'testAuth',
@@ -35,9 +55,15 @@ scenarios:
         orderId: 'ORDER-123',
         useIP: true,
         overrideTimestamp: true,
-        customTimestamp: 1609459200000, // 2021-01-01T00:00:00+00:00
+        customTimestamp: 1775562730000, // 2026-04-07T11:52:10+00:00
         productArray: [
-          { item_id: "SKU1", item_name: "Tee", price: 10, quantity: 1, item_category: "Apparel" }
+          {
+            item_id: 'SKU1',
+            item_name: 'Tee',
+            price: 10,
+            quantity: 1,
+            item_category: 'Apparel'
+          }
         ]
       };
 
@@ -48,17 +74,17 @@ scenarios:
 
       mock('sendHttpRequest', (url, options, body) => {
         assertThat(url).isEqualTo('https://api.impact.com/Advertisers/testSID/Conversions');
-        
+
         assertThat(options.headers.Authorization).isEqualTo('Basic encodedAuthString');
         assertThat(options.headers['Content-Type']).isEqualTo('application/json');
 
         const parsedBody = JSON.parse(body);
         assertThat(parsedBody.ClickId).isEqualTo('impact_cookie_id');
-        assertThat(parsedBody.EventDate).isEqualTo('2021-01-01T00:00:00+00:00');
+        assertThat(parsedBody.EventDate).isEqualTo('2026-04-07T11:52:10+00:00');
         assertThat(parsedBody.OrderId).isEqualTo('ORDER-123');
         assertThat(parsedBody.CurrencyCode).isEqualTo('USD');
         assertThat(parsedBody.IpAddress).isEqualTo('192.168.1.1');
-        
+
         assertThat(parsedBody.ItemSku1).isEqualTo('SKU1');
         assertThat(parsedBody.ItemName1).isEqualTo('Tee');
         assertThat(parsedBody.ItemPrice1).isEqualTo(10);
@@ -74,7 +100,7 @@ scenarios:
 
   - name: Conversion - Handles API Rejections (400 Bad Request)
     code: |-
-      const mockData = {
+      mockData = {
         type: 'conversion',
         accountSID: 'testSID',
         authToken: 'testAuth',
@@ -88,7 +114,9 @@ scenarios:
 
       // Force a 400 rejection from the API
       mock('sendHttpRequest', () => {
-        return Promise.create((resolve) => resolve({ statusCode: 400, body: '{"error":"bad data"}' }));
+        return Promise.create((resolve) =>
+          resolve({ statusCode: 400, body: '{"error":"bad data"}' })
+        );
       });
 
       runCode(mockData).then(() => {
@@ -98,53 +126,76 @@ scenarios:
 
   - name: Early Return - Guard Clause (GTM Own code analysis)
     code: |-
-      const mockData = { type: 'conversion' };
+      mockData = {
+        type: 'conversion',
+        adStorageConsent: 'optional'
+      };
 
       mock('getAllEventData', () => ({
-        page_location: 'https://gtm-msr.appspot.com/test'
+        page_location: 'https://gtm-msr.appspot.com/earlyreturn',
+        consent_state: { ad_storage: true },
+        'x-ga-gcs': 'G110'
       }));
 
-      runCode(mockData).then(() => {
-        assertApi('sendHttpRequest').wasNotCalled();
-        assertApi('gtmOnSuccess').wasCalled();
-      });
+      runCode(mockData);
+      assertApi('sendHttpRequest').wasNotCalled();
+      assertApi('gtmOnSuccess').wasCalled();
 
-  - name: Product Name and Category are present on the request body
+  - name: Early Return - Guard Clause (Consent Denied from UI)
     code: |-
-      const logToConsole = require('logToConsole');
+      mockData = {
+        type: 'conversion',
+        adStorageConsent: 'required'
+      };
 
-      mockData.type = 'conversion';
-      mockData.orderId = 'orderid123';
-      mockData.productArray = [{"item_id":"SKU_12345","item_name":"Stan and Friends Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":2.22,"index":0,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"green","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":10.01,"quantity":3},{"item_id":"SKU_12346","item_name":"Google Grey Women's Tee","affiliation":"Google Merchandise Store","coupon":"SUMMER_FUN","discount":3.33,"index":1,"item_brand":"Google","item_category":"Apparel","item_list_id":"related_products","item_list_name":"Related Products","item_variant":"gray","location_id":"ChIJIQBpAG2ahYAR_6128GcTUEo","price":21.01,"promotion_id":"P_12345","promotion_name":"Summer Sale","quantity":2}];
-
-      mock('sendHttpRequest', function(url, options, body) {
-        const parsedBody = JSON.parse(body);
-        logToConsole(parsedBody);
-        assertThat(parsedBody.ItemName1).isEqualTo("Stan and Friends Tee");
-        assertThat(parsedBody.ItemCategory1).isEqualTo("Apparel");
-        assertThat(parsedBody.ItemName2).isEqualTo("Google Grey Women's Tee");
-        assertThat(parsedBody.ItemCategory2).isEqualTo("Apparel");
-        return Promise.create(resolve => resolve('{}'));
-      });
+      mock('getAllEventData', () => ({
+        page_location: 'https://earlyreturn.test.com',
+        consent_state: { ad_storage: false },
+        'x-ga-gcs': 'G110'
+      }));
 
       runCode(mockData);
+      assertApi('sendHttpRequest').wasNotCalled();
+      assertApi('gtmOnSuccess').wasCalled();
 
-setup: |-
-  const Promise = require('Promise');
-  const JSON = require('JSON');
-  const mockData = {
-    "accountSID": "accountsid123",
-    "authToken": "authtoken123",
-    "eventTypeId": "eventypeid123",
-    "campaignId": "programid123"
-  };
+  - name: Early Return - Guard Clause (Consent Denied from GA header)
+    code: |-
+      mockData = {
+        type: 'conversion',
+        adStorageConsent: 'required'
+      };
 
-  mock('getRequestHeader', () => '');
-  mock('getContainerVersion', () => ({ debugMode: true }));
-  mock('logToConsole', () => {});
-  mock('BigQuery', { insert: () => {} });
-  mock('getTimestampMillis', () => 1000000000000);
+      mock('getAllEventData', () => ({
+        page_location: 'https://earlyreturn.test.com',
+        consent_state: { ad_storage: false },
+        'x-ga-gcs': 'G100'
+      }));
 
-  mock('sendHttpRequest', (url, options, body) => {
-    return Promise.create((resolve) => resolve({ statusCode: 200, headers: {}, body: '' }));
-  });
+      runCode(mockData);
+      assertApi('sendHttpRequest').wasNotCalled();
+      assertApi('gtmOnSuccess').wasCalled();
+
+  - name: Timestamp Overrides Correctly If Input Is Unsupported String
+    code: |-
+      const createRegex = require('createRegex');
+      const testRegex = require('testRegex');
+
+      const timestampIso8601Regex = createRegex(
+        '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$'
+      );
+
+      mockData.overrideTimestamp = true;
+      mockData.customTimestamp = '123-unsupported-timestamp-string';
+
+      mock('sendHttpRequest', (url, options, body) => {
+        const parsedBody = JSON.parse(body);
+        const eventDateIsInCorrectFormat = testRegex(timestampIso8601Regex, parsedBody.EventDate);
+
+        assertThat(parsedBody.EventDate).isNotEqualTo('123-unsupported-timestamp-string');
+        assertThat(eventDateIsInCorrectFormat).isTrue();
+        return Promise.create((resolve) => resolve({ statusCode: 200 }));
+      });
+
+      runCode(mockData).then(() => {
+        assertApi('gtmOnSuccess').wasCalled();
+      });
