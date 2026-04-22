@@ -56,27 +56,27 @@ if (data.type === 'page_view') {
     Accept: 'application/json',
     Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
   };
-  const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
+
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
     : {};
-  let currencyFromItems = '';
-  let couponFromItems = '';
-  const impactNames = {
-    id: 'ItemSku',
-    name: 'ItemName',
-    category: 'ItemCategory',
-    quantity: 'ItemQuantity',
-    price: 'ItemPrice'
-  };
-
-  postBody.ClickId = getCookieValues('impact_cid')[0] || '';
+  const timestamp = data.overrideTimestamp ? data.customTimestamp : getTimestampMillis();
   postBody.EventDate = convertTimestampToISO(timestamp);
   postBody.EventTypeId = data.eventTypeId;
   postBody.CampaignId = data.campaignId;
   postBody.OrderId = data.orderId;
 
-  if (data.productArray) {
+  let currencyFromItems = '';
+  let couponFromItems = '';
+  if (getType(data.productArray) === 'array') {
+    const impactNames = {
+      id: 'ItemSku',
+      name: 'ItemName',
+      category: 'ItemCategory',
+      quantity: 'ItemQuantity',
+      price: 'ItemPrice'
+    };
+
     for (let i = 0; i < data.productArray.length; i++) {
       if (data.productArray[i].currency) currencyFromItems = data.productArray[i].currency;
       if (data.productArray[i].coupon) couponFromItems = data.productArray[i].coupon;
@@ -125,10 +125,22 @@ if (data.type === 'page_view') {
     postBody.IpAddress = getRemoteAddress();
   }
 
+  // Attribution Keys
+
+  const autoMapAttributionKeys = data.hasOwnProperty('autoMapAttributionKeys')
+    ? data.autoMapAttributionKeys
+    : true; // To avoid a breaking change.
+
+  postBody.ClickId = autoMapAttributionKeys ? getCookieValues('impact_cid')[0] || '' : '';
+
+  if (data.attributionKeys) {
+    data.attributionKeys.forEach((d) => (postBody[d.name] = d.value));
+  }
+
   log({
     Name: 'Impact',
     Type: 'Request',
-    EventName: data.eventName,
+    EventName: 'Conversion',
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
     RequestBody: postBody
@@ -140,17 +152,13 @@ if (data.type === 'page_view') {
       log({
         Name: 'Impact',
         Type: 'Response',
-        EventName: data.eventName,
+        EventName: 'Conversion',
         ResponseStatusCode: statusCode,
         ResponseHeaders: headers,
         ResponseBody: body
       });
 
-      if (statusCode >= 200 && statusCode < 300) {
-        data.gtmOnSuccess();
-      } else {
-        data.gtmOnFailure();
-      }
+      return statusCode >= 200 && statusCode < 300 ? data.gtmOnSuccess() : data.gtmOnFailure();
     },
     { headers: requestHeaders, method: 'POST' },
     JSON.stringify(postBody)
