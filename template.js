@@ -32,7 +32,7 @@ if (data.type === 'page_view') {
   const url = eventData.page_location || getRequestHeader('referer');
 
   if (url) {
-    const value = parseUrl(url).searchParams[data.clickIdParameterName];
+    const value = parseUrl(url).searchParams[data.clickIdParameterName || 'im_ref'];
 
     if (value) {
       const options = {

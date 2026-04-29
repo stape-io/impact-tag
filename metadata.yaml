@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/impact-tag'
 versions:
+  - sha: 456ee54d140cbb79711935b4ae41167998361bb8
+    changeNotes: Add im_ref as default Click ID name and improve help texts.
   - sha: b3534d70288b26a33ad38b9efec8658772c21cd2
     changeNotes: Add Attribution Keys override support.
   - sha: 83c6ca2a642014f499a3591cb62eae4de5f28446

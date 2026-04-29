@@ -50,7 +50,7 @@ ___TEMPLATE_PARAMETERS___
     ],
     "simpleValueType": true,
     "defaultValue": "page_view",
-    "help": "\u003cb\u003ePageView\u003c/b\u003e - stores the {clickid} URL parameter inside the impact_cid cookie\u003cbr\u003e\u003cbr\u003e\n\u003cb\u003eConversion\u003c/b\u003e - Send request with data about the conversion to the Impact"
+    "help": "\u003cb\u003ePageView\u003c/b\u003e - stores the {clickid} URL parameter (by default, the \u003ci\u003eim_ref\u003c/i\u003e parameter) inside the \u003ci\u003eimpact_cid\u003c/i\u003e cookie.\n\u003cbr\u003e\u003cbr\u003e\n\u003cb\u003eConversion\u003c/b\u003e - sends a request with data about the conversion to the Impact."
   },
   {
     "type": "GROUP",
@@ -61,18 +61,18 @@ ___TEMPLATE_PARAMETERS___
         "name": "clickIdParameterName",
         "displayName": "URL parameter name for obtaining Impact Click ID",
         "simpleValueType": true,
-        "help": "Configured on the \u003ca target\u003d\"_blank\" href\u003d\"https://app.impact.com/secure/advertiser/tracking-settings/gateway-trackingsettings-flow.ihtml\"\u003eGateway Settings\u003c/a\u003e screen.",
+        "help": "Default: \u003ci\u003eim_ref\u003c/i\u003e.\n\u003cbr/\u003e\u003cbr/\u003e\nConfigured on the \u003ca target\u003d\"_blank\" href\u003d\"https://app.impact.com/secure/advertiser/tracking-settings/gateway-trackingsettings-flow.ihtml\"\u003eGateway Settings\u003c/a\u003e screen.\n\u003cbr/\u003e\u003cbr/\u003e\n\u003ca href\u003d\"https://integrations.impact.com/impact-brand/docs/api-integration-implementation#capture--store-im_ref\"\u003eLearn more\u003c/a\u003e.",
         "valueValidators": [
           {
             "type": "NON_EMPTY"
           }
         ],
-        "defaultValue": "clickid"
+        "defaultValue": "im_ref"
       },
       {
         "type": "TEXT",
         "name": "expiration",
-        "displayName": "Expiration time for the impact_cid cookie in seconds.",
+        "displayName": "Expiration time for the Impact Click ID cookie",
         "simpleValueType": true,
         "valueValidators": [
           {
@@ -82,8 +82,10 @@ ___TEMPLATE_PARAMETERS___
             "type": "NON_NEGATIVE_NUMBER"
           }
         ],
-        "defaultValue": 0,
-        "help": "Use 0 for saving only for the session."
+        "defaultValue": 2592000,
+        "help": "The expiration time of the cookie should match how long your contracts\u0027 Referral Window is set to (usually 30 days or 2592000 seconds).\n\u003cbr/\u003e\u003cbr/\u003e\nUse 0 for saving only for the session.",
+        "valueHint": "2592000",
+        "valueUnit": "seconds"
       }
     ],
     "enablingConditions": [
@@ -513,7 +515,7 @@ if (data.type === 'page_view') {
   const url = eventData.page_location || getRequestHeader('referer');
 
   if (url) {
-    const value = parseUrl(url).searchParams[data.clickIdParameterName];
+    const value = parseUrl(url).searchParams[data.clickIdParameterName || 'im_ref'];
 
     if (value) {
       const options = {
@@ -1154,6 +1156,11 @@ setup: |-
 
 ___NOTES___
 
+2026-04-29 - Change Notes:
+  - Change default URL parameter name for Click ID from `clickid` to `im_ref`, and add 'im_ref' fallback to ensure the right parameter is read even when the field is left empty
+  - Update expiration cookie default from 0 (session-only) to 2592000 seconds (30 days) to align with Impact's typical Referral Window;
+  - Improve help text on Event Type and URL parameter name fields: explicitly name the `im_ref` parameter and `impact_cid` cookie, and add a "Learn more" documentation link to the URL parameter name field
+
 2026-04-22 - Change Notes:
   - Add Attribution Keys group in Conversion settings: auto-map toggle (on by default) reads impact_cid cookie as Click ID; manual values always override auto-mapped ones
   - Group PageView fields (clickIdParameterName, expiration) into a pageviewGroup container
@@ -1163,4 +1170,3 @@ ___NOTES___
   - Fix Conversion log EventName to use static 'Conversion' string instead of unset data.eventName
 
 Created on 10/11/2021, 09:29:27
-
