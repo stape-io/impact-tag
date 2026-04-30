@@ -36,6 +36,8 @@ jobs:
     needs: [bootstrap, check-changes]
     if: needs.check-changes.outputs.readme_changed == 'true'
     uses: stape-io/template-changes-shared-workflows/.github/workflows/discourse-readme-sync.yml@main
+    permissions:
+      contents: read
     with:
       post_id: ${{ needs.bootstrap.outputs.post_id }}
     secrets: inherit
