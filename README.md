@@ -8,7 +8,7 @@
 
 - On a **Conversion** event the Impact tag sends a postback with conversion data to Impact.
   - `Impact Account SID` - Impact Account SID
-  - `Auth Token` - you can view and manage your API keys in [the impact.com Platform](https://app.impact.com/secure/advertiser/accountSettings/techintegration/adv-wsapi-table-flow.ihtml)
+  - `Auth Token` - view and manage API keys in [the impact.com Platform](https://app.impact.com/secure/advertiser/accountSettings/techintegration/adv-wsapi-table-flow.ihtml)
   - `Event Type ID` - Unique identifier for the event type (or action tracker) that tracked this conversion.
   - `Campaign/Program ID` - Unique identifier for the campaign (or program) that the conversion is associated with.
   - `Order ID` (**Required**) - Your unique identifier for the order associated with this conversion. For example, in a retail sale, this could be the Order ID you've assigned the customer for their purchase. Note that an `OrderId` value only needs to be unique to the event type (also known as the action tracker).
