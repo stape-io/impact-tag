@@ -23,14 +23,17 @@ const toBase64 = require('toBase64');
 ==============================================================================*/
 
 const eventData = getAllEventData();
+const url = eventData.page_location || getRequestHeader('referer');
 
 if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
 }
 
-if (data.type === 'page_view') {
-  const url = eventData.page_location || getRequestHeader('referer');
+if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
+  return data.gtmOnSuccess();
+}
 
+if (data.type === 'page_view') {
   if (url) {
     const value = parseUrl(url).searchParams[data.clickIdParameterName || 'im_ref'];
 
@@ -50,13 +53,15 @@ if (data.type === 'page_view') {
 
   return data.gtmOnSuccess();
 } else {
-  let requestUrl = 'https://api.impact.com/Advertisers/' + enc(data.accountSID) + '/Conversions';
-  const requestHeaders = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
+  const requestUrl = 'https://api.impact.com/Advertisers/' + enc(data.accountSID) + '/Conversions';
+  const requestOptions = {
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: 'Basic ' + toBase64(data.accountSID + ':' + data.authToken)
+    },
+    method: 'POST'
   };
-
   const postBody = data.additionalParameters
     ? makeTableMap(data.additionalParameters, 'name', 'value')
     : {};
@@ -68,7 +73,7 @@ if (data.type === 'page_view') {
 
   let currencyFromItems = '';
   let couponFromItems = '';
-  if (getType(data.productArray) === 'array') {
+  if (getType(data.productArray) === 'array' && data.productArray.length) {
     const impactNames = {
       id: 'ItemSku',
       name: 'ItemName',
@@ -146,23 +151,31 @@ if (data.type === 'page_view') {
     RequestBody: postBody
   });
 
-  return sendHttpRequest(
-    requestUrl,
-    (statusCode, headers, body) => {
+  return sendHttpRequest(requestUrl, requestOptions, JSON.stringify(postBody))
+    .then((response) => {
       log({
         Name: 'Impact',
         Type: 'Response',
         EventName: 'Conversion',
-        ResponseStatusCode: statusCode,
-        ResponseHeaders: headers,
-        ResponseBody: body
+        ResponseStatusCode: response.statusCode,
+        ResponseHeaders: response.headers,
+        ResponseBody: response.body
       });
 
-      return statusCode >= 200 && statusCode < 300 ? data.gtmOnSuccess() : data.gtmOnFailure();
-    },
-    { headers: requestHeaders, method: 'POST' },
-    JSON.stringify(postBody)
-  );
+      return response.statusCode >= 200 && response.statusCode < 300
+        ? data.gtmOnSuccess()
+        : data.gtmOnFailure();
+    })
+    .catch((error) => {
+      log({
+        Name: 'Impact',
+        Type: 'Message',
+        EventName: 'Conversion',
+        Message: 'API call failed',
+        Reason: JSON.stringify(error)
+      });
+      return data.gtmOnFailure();
+    });
 }
 
 /*==============================================================================
