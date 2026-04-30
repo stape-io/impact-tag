@@ -4,7 +4,7 @@
 
 ### Event types
 
-- On a **Page view** event the Impact tag stores the `im_ref` URL parameter inside the `impact_cid` cookie.
+- On a **Page View** event the Impact tag stores the `im_ref` URL parameter inside the `impact_cid` cookie.
 
 - On a **Conversion** event the Impact tag sends a postback with conversion data to Impact.
   - `Impact Account SID` - Impact Account SID
