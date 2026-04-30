@@ -4,9 +4,9 @@
 
 ### Event types
 
-- On a **page view** event the Impact tag stores the `im_ref` URL parameter inside the `impact_cid` cookie.
+- On a **Page view** event the Impact tag stores the `im_ref` URL parameter inside the `impact_cid` cookie.
 
-- On a **conversion** event the Impact tag sends a postback with conversion data to Impact.
+- On a **Conversion** event the Impact tag sends a postback with conversion data to Impact.
   - `Impact Account SID` - Impact Account SID
   - `Auth Token` - you can view and manage your API keys in [the impact.com Platform](https://app.impact.com/secure/advertiser/accountSettings/techintegration/adv-wsapi-table-flow.ihtml)
   - `Event Type ID` - Unique identifier for the event type (or action tracker) that tracked this conversion.
