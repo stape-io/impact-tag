@@ -1,7 +1,7 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/impact-tag'
 versions:
-  - sha: 755152a992cf6d087a4ba16ed98dfab031b80cca
+  - sha: b778fa1e91e1e39a27adcb4b26ac686d60f7e4d1
     changeNotes: Add catch log, guard clause and tests.
   - sha: 456ee54d140cbb79711935b4ae41167998361bb8
     changeNotes: Add im_ref as default Click ID name and improve help texts.
