@@ -28,7 +28,6 @@ jobs:
     with:
       before_sha: ${{ github.event.before }}
       head_sha: ${{ github.sha }}
-      commit_message: ${{ needs.check-changes.outputs.commit_message }}
       commit_url: ${{ needs.check-changes.outputs.commit_url }}
       topic_id: ${{ needs.bootstrap.outputs.topic_id }}
     secrets: inherit
