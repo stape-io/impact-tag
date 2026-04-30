@@ -9,9 +9,9 @@
 - On a **Conversion** event the Impact tag sends a postback with conversion data to Impact.
   - `Impact Account SID` - Impact Account SID
   - `Auth Token` - view and manage API keys in [the impact.com Platform](https://app.impact.com/secure/advertiser/accountSettings/techintegration/adv-wsapi-table-flow.ihtml)
-  - `Event Type ID` - Unique identifier for the event type (or action tracker) that tracked this conversion.
-  - `Campaign/Program ID` - Unique identifier for the campaign (or program) that the conversion is associated with.
-  - `Order ID` (**Required**) - Your unique identifier for the order associated with this conversion. For example, in a retail sale, this could be the Order ID you've assigned the customer for their purchase. Note that an `OrderId` value only needs to be unique to the event type (also known as the action tracker).
+  - `Event Type ID` - unique identifier for the event type (or action tracker) that tracked this conversion.
+  - `Campaign/Program ID` - unique identifier for the campaign (or program) that the conversion is associated with.
+  - `Order ID` (**Required**) - unique identifier for the order associated with this conversion. For example, in a retail sale, this could be the Order ID you've assigned the customer for their purchase. Note that an `OrderId` value only needs to be unique to the event type (also known as the action tracker).
   - `Array of products` - product data in GA4 `items` or UA `products` format
   - `Send User IP address` - user IP address
   - `Attribution Keys` - at least one attribution key is required. When **Automap Attribution Keys** is enabled (default), the tag reads the `impact_cid` cookie as the Click ID automatically. Any value entered manually always overrides the auto-mapped one. Supported keys: Click ID, Customer Email, Customer ID, Custom Profile ID, Order Promo Code, Unique URL, Google Advertising ID, Apple IDFA, Apple IDFV, Media ID, Phone Number, Caller ID.
