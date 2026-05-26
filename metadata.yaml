@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/impact-tag'
 versions:
+  - sha: a2c411ad4831f266fbd9698fd6bff0d702215b75
+    changeNotes: Logging removal.
   - sha: b778fa1e91e1e39a27adcb4b26ac686d60f7e4d1
     changeNotes: Add catch log, guard clause and tests.
   - sha: 456ee54d140cbb79711935b4ae41167998361bb8
